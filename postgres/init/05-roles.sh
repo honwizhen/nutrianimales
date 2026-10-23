@@ -34,10 +34,10 @@ CREATE ROLE rol_gerente NOLOGIN;
 CREATE ROLE rol_ti      NOLOGIN;
 CREATE ROLE rol_auditor NOLOGIN;
 
--- Gerente: solo tablas de reportes, sin auditoria
+-- Gerente: solo vistas de reportes (04b-vistas-reportes.sql), sin tablas ni auditoria
 GRANT CONNECT ON DATABASE :"db" TO rol_gerente;
 GRANT USAGE ON SCHEMA public TO rol_gerente;
-GRANT SELECT ON ventas, clientes, productos, lotes_produccion TO rol_gerente;
+GRANT SELECT ON v_ventas_resumen, v_produccion_por_planta, v_clientes TO rol_gerente;
 
 -- TI: lectura total + escritura en backups y alertas. Tambien es el usuario de los flujos de N8N.
 GRANT CONNECT ON DATABASE :"db" TO rol_ti;
