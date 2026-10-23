@@ -24,6 +24,17 @@
       }
     },
     {
+      "id": "h2-0",
+      "name": "Probar manualmente",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -200
+      ],
+      "parameters": {}
+    },
+    {
       "id": "h2-2",
       "name": "Comparar hashes MD5",
       "type": "n8n-nodes-base.postgres",
@@ -109,6 +120,17 @@
         [
           {
             "node": "Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probar manualmente": {
+      "main": [
+        [
+          {
+            "node": "Comparar hashes MD5",
             "type": "main",
             "index": 0
           }

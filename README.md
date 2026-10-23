@@ -96,7 +96,7 @@ git checkout postgres/conf/pg_hba.conf                        # restaurar
 docker exec -it nutri_postgres psql -U postgres -d nutrianimales_db -c "SELECT fn_h2_aprobar_cambio();"
 ```
 
-Cada alerta queda registrada en `alertas_auditoria` y se envia a Telegram con el formato del enunciado.
+Cada alerta queda registrada en `alertas_auditoria` y se envia a Telegram con el formato del enunciado. Los flujos corren cada minuto y ademas tienen un disparador "Probar manualmente" para la demo en vivo. `scripts/n8n-import.sh` se puede repetir: despublica, reimporta y vuelve a publicar.
 
 `fn_h5_desviaciones()` ya compara la configuracion contra `pg_settings_baseline` y detecta reglas md5 en pg_hba; el flujo H5 puede usarla directamente.
 
@@ -115,6 +115,17 @@ Todas las contrasenas estan en `.env`. Ninguna esta escrita en el repositorio.
 ## Nota sobre Filebeat
 
 El enunciado menciona Filebeat + Loki. Filebeat no tiene salida nativa a Loki (requeriria Logstash con un plugin) y Promtail, el agente original de Loki, llego a fin de vida el 2 de marzo de 2026. Se usa Grafana Alloy, su reemplazo oficial, con la misma funcion: leer `ufw.log` y `auth.log` y enviarlos a Loki.
+
+## Estado de pruebas
+
+Probado fuera de Docker (PostgreSQL 16 y n8n 2.44.6 nativos):
+
+- Los 6 scripts de `postgres/init` sobre una base nueva.
+- Puntos 5, 6, 7, 11 y 12, RBAC (gerente sin acceso a auditoria) y triggers con valor antes/despues.
+- H2 y H5 detectan cambios; H2 alerta una sola vez por cambio.
+- Flujos H1 y H2 importados, publicados y ejecutados de punta a punta (H1 contra un Loki simulado). Telegram no se pudo probar.
+
+Pendiente de probar en la VM: `docker compose up` completo, Nginx (`docker exec nutri_nginx nginx -t`), pgAdmin detras de `/pgadmin/`, Loki + Alloy reales y el envio a Telegram.
 
 ## Reiniciar desde cero
 

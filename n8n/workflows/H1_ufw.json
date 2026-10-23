@@ -24,6 +24,17 @@
       }
     },
     {
+      "id": "h1-0",
+      "name": "Probar manualmente",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -200
+      ],
+      "parameters": {}
+    },
+    {
       "id": "h1-2",
       "name": "Ventana de tiempo",
       "type": "n8n-nodes-base.code",
@@ -209,6 +220,17 @@
         [
           {
             "node": "Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probar manualmente": {
+      "main": [
+        [
+          {
+            "node": "Ventana de tiempo",
             "type": "main",
             "index": 0
           }

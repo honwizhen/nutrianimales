@@ -37,17 +37,19 @@ JSON
 docker exec "$C" sh -c 'n8n import:credentials --input=/tmp/cred.json; rm -f /tmp/cred.json'
 
 echo "[2/3] Flujos"
+IDS=$(grep -ho '"id": "nutri[A-Za-z0-9]*"' n8n/workflows/*.json | cut -d'"' -f4 | grep -vE 'Pg|Telegram')
+for id in $IDS; do   # un flujo publicado no se puede sobrescribir: despublicar primero (repetible)
+  docker exec "$C" n8n unpublish:workflow --id="$id" >/dev/null 2>&1 || true
+done
 for f in n8n/workflows/*.json; do
   docker cp "$f" "$C:/tmp/wf.json"
   docker exec "$C" sh -c 'n8n import:workflow --input=/tmp/wf.json && rm -f /tmp/wf.json'
 done
 
-echo "[3/3] Activacion"
-for id in $(python3 -c "import json,glob;[print(json.load(open(f))['id']) for f in sorted(glob.glob('n8n/workflows/*.json'))]" 2>/dev/null \
-            || grep -ho '"id": "nutri[A-Za-z0-9]*"' n8n/workflows/*.json | grep -v Pg | grep -v Telegram | cut -d'"' -f4); do
+echo "[3/3] Publicacion"
+for id in $IDS; do
   docker exec "$C" n8n publish:workflow --id="$id" >/dev/null 2>&1 \
-    || docker exec "$C" n8n update:workflow --id="$id" --active=true >/dev/null 2>&1 \
-    || echo "  [!] No se pudo activar $id. Activelo desde la interfaz."
+    || echo "  [!] No se pudo publicar $id. Activelo desde la interfaz de N8N."
 done
 docker restart "$C" >/dev/null
 echo "[ok] Flujos importados y activados. N8N se reinicio para cargarlos."
