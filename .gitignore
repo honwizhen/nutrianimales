@@ -1,0 +1,12 @@
+# Secretos
+.env
+*.key
+*.pem
+*.crt
+
+# Datos de los volumenes
+data/
+
+# Varios
+*.log
+.DS_Store

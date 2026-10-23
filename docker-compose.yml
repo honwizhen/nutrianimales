@@ -1,0 +1,96 @@
+name: nutrianimales
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: nutri_postgres
+    restart: unless-stopped
+    # Sin "ports:" a proposito. Solo los contenedores de nutrianimales-net llegan a Postgres.
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    command: >
+      postgres
+      -c config_file=/etc/postgresql/postgresql.conf
+      -c hba_file=/etc/postgresql/pg_hba.conf
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./postgres/certs:/etc/postgresql/certs:ro
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - nutrianimales-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  n8n:
+    image: n8nio/n8n:latest   # fije una version concreta antes de la entrega
+    container_name: nutri_n8n
+    restart: unless-stopped
+    user: "1000:1000"
+    environment:
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_PROTOCOL: https
+      WEBHOOK_URL: https://localhost:8443/
+      N8N_PROXY_HOPS: 1
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      GENERIC_TIMEZONE: America/Costa_Rica
+      TZ: America/Costa_Rica
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_LOG_LEVEL: info
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+    volumes:
+      - ./data/n8n:/home/node/.n8n
+    networks:
+      - nutrianimales-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  pgadmin:
+    image: dpage/pgadmin4:latest   # fije una version concreta antes de la entrega
+    container_name: nutri_pgadmin
+    restart: unless-stopped
+    user: "1000:1000"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+      # Un usuario no-root no puede usar el puerto 80
+      PGADMIN_LISTEN_PORT: 5050
+    volumes:
+      - ./data/pgadmin:/var/lib/pgadmin
+    networks:
+      - nutrianimales-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:alpine
+    container_name: nutri_nginx
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    networks:
+      - nutrianimales-net
+    depends_on:
+      - n8n
+      - pgadmin
+
+networks:
+  nutrianimales-net:
+    name: nutrianimales-net
+    driver: bridge
