@@ -5,20 +5,26 @@ services:
     image: postgres:16
     container_name: nutri_postgres
     restart: unless-stopped
-    # Sin "ports:" a proposito. Solo los contenedores de nutrianimales-net llegan a Postgres.
+    # Sin "ports:" a proposito (hardening 4). Solo los contenedores de nutrianimales-net llegan a Postgres.
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+      # Usados solo por postgres/init/05-roles.sh en la primera inicializacion
+      AGENTE_IA_PASSWORD: ${AGENTE_IA_PASSWORD}
+      GERENTE_DB_PASSWORD: ${GERENTE_DB_PASSWORD}
+      TI_DB_PASSWORD: ${TI_DB_PASSWORD}
+      AUDITOR_DB_PASSWORD: ${AUDITOR_DB_PASSWORD}
     command: >
       postgres
-      -c config_file=/etc/postgresql/postgresql.conf
-      -c hba_file=/etc/postgresql/pg_hba.conf
+      -c config_file=/etc/postgresql/conf/postgresql.conf
+      -c hba_file=/etc/postgresql/conf/pg_hba.conf
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
-      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
-      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      # Se monta el directorio (no los archivos sueltos) para que la alerta H2
+      # vea los cambios hechos en el host aunque el editor reemplace el archivo.
+      - ./postgres/conf:/etc/postgresql/conf:ro
       - ./postgres/certs:/etc/postgresql/certs:ro
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
     networks:
@@ -30,7 +36,7 @@ services:
       retries: 10
 
   n8n:
-    image: n8nio/n8n:latest   # fije una version concreta antes de la entrega
+    image: n8nio/n8n:2.44.6
     container_name: nutri_n8n
     restart: unless-stopped
     user: "1000:1000"
@@ -38,13 +44,18 @@ services:
       N8N_HOST: localhost
       N8N_PORT: 5678
       N8N_PROTOCOL: https
+      N8N_EDITOR_BASE_URL: https://localhost:8443/
       WEBHOOK_URL: https://localhost:8443/
       N8N_PROXY_HOPS: 1
+      N8N_SECURE_COOKIE: "true"
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
       GENERIC_TIMEZONE: America/Costa_Rica
       TZ: America/Costa_Rica
       N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
       N8N_LOG_LEVEL: info
+      # Secretos accesibles con $env en los flujos (seccion 9)
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       GROQ_API_KEY: ${GROQ_API_KEY}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
@@ -57,7 +68,7 @@ services:
         condition: service_healthy
 
   pgadmin:
-    image: dpage/pgadmin4:latest   # fije una version concreta antes de la entrega
+    image: dpage/pgadmin4:9.18
     container_name: nutri_pgadmin
     restart: unless-stopped
     user: "1000:1000"
@@ -74,8 +85,39 @@ services:
       postgres:
         condition: service_healthy
 
+  loki:
+    image: grafana/loki:3.6.18
+    container_name: nutri_loki
+    restart: unless-stopped
+    user: "10001:10001"
+    command: ["-config.file=/etc/loki/loki-config.yaml"]
+    volumes:
+      - ./loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - ./data/loki:/loki
+    networks:
+      - nutrianimales-net
+
+  alloy:
+    image: grafana/alloy:v1.21.2
+    container_name: nutri_alloy
+    restart: unless-stopped
+    # Grupo 4 = adm en Ubuntu: permite leer ufw.log y auth.log sin ser root
+    user: "1000:4"
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy/data
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - ./data/alloy:/var/lib/alloy/data
+      - /var/log:/host/log:ro
+    networks:
+      - nutrianimales-net
+    depends_on:
+      - loki
+
   nginx:
-    image: nginx:alpine
+    image: nginx:1.28-alpine
     container_name: nutri_nginx
     restart: unless-stopped
     ports:
@@ -94,3 +136,6 @@ networks:
   nutrianimales-net:
     name: nutrianimales-net
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16   # fijo: pg_hba.conf solo acepta esta red (alerta H4: IP fuera de 172.x)

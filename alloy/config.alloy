@@ -1,0 +1,23 @@
+// Alloy lee los logs del host montados en /host/log y los envia a Loki.
+// Reemplaza a Filebeat/Promtail: Filebeat no tiene salida nativa a Loki
+// y Promtail llego a fin de vida en marzo de 2026.
+
+local.file_match "host_logs" {
+  path_targets = [
+    {"__path__" = "/host/log/ufw.log",  "job" = "ufw",  "host" = "nutrianimales"},
+    {"__path__" = "/host/log/auth.log", "job" = "auth", "host" = "nutrianimales"},
+  ]
+  sync_period = "10s"
+}
+
+loki.source.file "host_logs" {
+  targets       = local.file_match.host_logs.targets
+  forward_to    = [loki.write.local.receiver]
+  tail_from_end = true
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

@@ -1,0 +1,127 @@
+{
+  "id": "nutriH2hash00001",
+  "name": "H2 - Hash de pg_hba.conf o postgresql.conf",
+  "active": false,
+  "nodes": [
+    {
+      "id": "h2-1",
+      "name": "Cada minuto",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "h2-2",
+      "name": "Comparar hashes MD5",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Una alerta por cada hash nuevo (no se repite cada minuto mientras el archivo siga modificado)\nWITH cambios AS (\n  SELECT h.archivo, h.hash_esperado, h.hash_actual\n  FROM fn_h2_hashes() h\n  WHERE h.modificado\n    AND NOT EXISTS (SELECT 1 FROM alertas_auditoria a\n                    WHERE a.alerta = 'H2' AND a.mensaje LIKE '%' || h.hash_actual || '%')\n)\nINSERT INTO alertas_auditoria (tipo, alerta, mensaje, severidad)\nSELECT 'hardening', 'H2',\n  concat_ws(E'\\n',\n    'ALERTA CRÍTICA - NutriAnimales S.A. | Lead University BCD 9220',\n    'Tipo: Archivo de configuración de PostgreSQL modificado (H2)',\n    'Fecha: ' || to_char(now() AT TIME ZONE 'America/Costa_Rica', 'YYYY-MM-DD HH24:MI:SS'),\n    'Archivo: ' || archivo,\n    'Hash esperado (MD5): ' || hash_esperado,\n    'Hash actual (MD5): ' || hash_actual,\n    'Severidad: CRÍTICA',\n    'Acción: Revisar el cambio. Si no fue autorizado, restaurar el archivo. Si fue aprobado, ejecutar SELECT fn_h2_aprobar_cambio(); como postgres.'),\n  'critica'\nFROM cambios\nRETURNING id, mensaje;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "nutriPgTi01",
+          "name": "Postgres ti_db"
+        }
+      }
+    },
+    {
+      "id": "h2-3",
+      "name": "Solo alertas nuevas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// La consulta devuelve 0 filas si no hay alerta nueva\nreturn $input.all().filter(i => i.json.mensaje);"
+      }
+    },
+    {
+      "id": "h2-4",
+      "name": "Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.mensaje }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "nutriTelegram01",
+          "name": "Telegram NutriAnimales"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cada minuto": {
+      "main": [
+        [
+          {
+            "node": "Comparar hashes MD5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comparar hashes MD5": {
+      "main": [
+        [
+          {
+            "node": "Solo alertas nuevas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Solo alertas nuevas": {
+      "main": [
+        [
+          {
+            "node": "Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Costa_Rica",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "all"
+  },
+  "pinData": {},
+  "tags": []
+}

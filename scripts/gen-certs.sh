@@ -13,7 +13,7 @@ for svc in nginx postgres; do
   openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
     -keyout "$svc/certs/server.key" -out "$svc/certs/server.crt" \
     -subj "/C=CR/O=NutriAnimales S.A./CN=${svc}.nutrianimales-net" \
-    -addext "subjectAltName=DNS:localhost,DNS:${svc},IP:127.0.0.1"
+    -addext "subjectAltName=DNS:localhost,DNS:${svc},IP:127.0.0.1" 2>/dev/null
   chmod 600 "$svc/certs/server.key"
   chmod 644 "$svc/certs/server.crt"
   echo "[ok] $svc/certs"

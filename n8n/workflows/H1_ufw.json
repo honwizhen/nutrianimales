@@ -1,0 +1,227 @@
+{
+  "id": "nutriH1ufw000001",
+  "name": "H1 - Regla UFW modificada",
+  "active": false,
+  "nodes": [
+    {
+      "id": "h1-1",
+      "name": "Cada minuto",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "h1-2",
+      "name": "Ventana de tiempo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Ventana de busqueda en Loki: desde la ultima ejecucion hasta ahora (sin huecos ni duplicados)\nconst estado = $getWorkflowStaticData('global');\nconst fin = Date.now();\nconst inicio = estado.ultimoFin && fin - estado.ultimoFin < 3600000 ? estado.ultimoFin : fin - 60000;\nestado.ultimoFin = fin;\nreturn [{ json: { start: (BigInt(inicio) * 1000000n).toString(), end: (BigInt(fin) * 1000000n).toString() } }];"
+      }
+    },
+    {
+      "id": "h1-3",
+      "name": "Consultar Loki",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "url": "http://loki:3100/loki/api/v1/query_range",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "{job=~\"auth|ufw\"} |~ `COMMAND=\\S*ufw (allow|deny|reject|limit|delete|insert|prepend|route|disable|enable|reset|default)|\\[UFW ALLOW\\].* DPT=5432 `"
+            },
+            {
+              "name": "start",
+              "value": "={{ $json.start }}"
+            },
+            {
+              "name": "end",
+              "value": "={{ $json.end }}"
+            },
+            {
+              "name": "direction",
+              "value": "forward"
+            },
+            {
+              "name": "limit",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "h1-4",
+      "name": "Construir alerta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Convierte cada linea de Loki en un mensaje con el formato estandar del proyecto\nconst fmt = ns => new Date(Number(BigInt(ns) / 1000000n))\n  .toLocaleString('sv-SE', { timeZone: 'America/Costa_Rica' });\nconst out = [];\nfor (const s of $input.first().json.data?.result ?? []) {\n  for (const [ts, linea] of s.values) {\n    const esComando = s.stream.job === 'auth';\n    const usuario = (linea.match(/sudo:\\s+(\\S+)\\s*:/) || [])[1] || 'desconocido';\n    const comando = (linea.match(/COMMAND=(.*)$/) || [])[1] || '';\n    const src = (linea.match(/SRC=(\\S+)/) || [])[1] || '';\n    const detalle = esComando\n      ? `Comando: ${comando}\\nUsuario: ${usuario}`\n      : `Trafico permitido al puerto 5432 desde ${src}\\nLinea ufw.log: ${linea.slice(0, 300)}`;\n    out.push({ json: {\n      linea: linea.slice(0, 1000),\n      mensaje: [\n        'ALERTA CRÍTICA - NutriAnimales S.A. | Lead University BCD 9220',\n        `Tipo: ${esComando ? 'Regla UFW modificada' : 'Puerto de BD abierto en UFW'} (H1)`,\n        `Fecha: ${fmt(ts)}`,\n        detalle,\n        `Fuente: ${s.stream.job === 'auth' ? '/var/log/auth.log' : '/var/log/ufw.log'} via Loki`,\n        'Severidad: CRÍTICA',\n        'Acción: Verificar si el cambio fue autorizado. Revisar sudo ufw status numbered y revertir con sudo ufw delete <n>.'\n      ].join('\\n')\n    }});\n  }\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "h1-5",
+      "name": "Registrar en alertas_auditoria",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO alertas_auditoria (tipo, alerta, mensaje, severidad)\nVALUES ('hardening', 'H1', $1, 'critica')\nRETURNING id, mensaje;",
+        "options": {
+          "queryReplacement": "={{ [ $json.mensaje ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "nutriPgTi01",
+          "name": "Postgres ti_db"
+        }
+      }
+    },
+    {
+      "id": "h1-6",
+      "name": "Solo alertas nuevas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// La consulta devuelve 0 filas si no hay alerta nueva\nreturn $input.all().filter(i => i.json.mensaje);"
+      }
+    },
+    {
+      "id": "h1-7",
+      "name": "Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1320,
+        0
+      ],
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.mensaje }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "nutriTelegram01",
+          "name": "Telegram NutriAnimales"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cada minuto": {
+      "main": [
+        [
+          {
+            "node": "Ventana de tiempo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ventana de tiempo": {
+      "main": [
+        [
+          {
+            "node": "Consultar Loki",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Loki": {
+      "main": [
+        [
+          {
+            "node": "Construir alerta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir alerta": {
+      "main": [
+        [
+          {
+            "node": "Registrar en alertas_auditoria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar en alertas_auditoria": {
+      "main": [
+        [
+          {
+            "node": "Solo alertas nuevas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Solo alertas nuevas": {
+      "main": [
+        [
+          {
+            "node": "Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Costa_Rica",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "all"
+  },
+  "pinData": {},
+  "tags": []
+}
