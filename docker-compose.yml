@@ -16,6 +16,7 @@ services:
       GERENTE_DB_PASSWORD: ${GERENTE_DB_PASSWORD}
       TI_DB_PASSWORD: ${TI_DB_PASSWORD}
       AUDITOR_DB_PASSWORD: ${AUDITOR_DB_PASSWORD}
+      APP_PRODUCCION_PASSWORD: ${APP_PRODUCCION_PASSWORD}
     command: >
       postgres
       -c config_file=/etc/postgresql/conf/postgresql.conf

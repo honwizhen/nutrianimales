@@ -4,7 +4,7 @@
 set -euo pipefail
 export PGPASSWORD="${PGPASSWORD:-$POSTGRES_PASSWORD}"
 
-for v in AGENTE_IA_PASSWORD GERENTE_DB_PASSWORD TI_DB_PASSWORD AUDITOR_DB_PASSWORD; do
+for v in AGENTE_IA_PASSWORD GERENTE_DB_PASSWORD TI_DB_PASSWORD AUDITOR_DB_PASSWORD APP_PRODUCCION_PASSWORD; do
   if [ -z "${!v:-}" ]; then echo "Falta la variable $v en .env" >&2; exit 1; fi
 done
 
@@ -13,7 +13,8 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
   -v agente_pw="$AGENTE_IA_PASSWORD" \
   -v gerente_pw="$GERENTE_DB_PASSWORD" \
   -v ti_pw="$TI_DB_PASSWORD" \
-  -v auditor_pw="$AUDITOR_DB_PASSWORD" <<'SQL'
+  -v auditor_pw="$AUDITOR_DB_PASSWORD" \
+  -v app_prod_pw="$APP_PRODUCCION_PASSWORD" <<'SQL'
 
 -- Nadie hereda permisos por defecto sobre el esquema public
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
@@ -34,10 +35,10 @@ CREATE ROLE rol_gerente NOLOGIN;
 CREATE ROLE rol_ti      NOLOGIN;
 CREATE ROLE rol_auditor NOLOGIN;
 
--- Gerente: solo tablas de reportes, sin auditoria
+-- Gerente: solo vistas de reportes (04b-vistas-reportes.sql), sin tablas ni auditoria
 GRANT CONNECT ON DATABASE :"db" TO rol_gerente;
 GRANT USAGE ON SCHEMA public TO rol_gerente;
-GRANT SELECT ON ventas, clientes, productos, lotes_produccion TO rol_gerente;
+GRANT SELECT ON v_ventas_resumen, v_produccion_por_planta, v_clientes TO rol_gerente;
 
 -- TI: lectura total + escritura en backups y alertas. Tambien es el usuario de los flujos de N8N.
 GRANT CONNECT ON DATABASE :"db" TO rol_ti;
@@ -56,6 +57,19 @@ GRANT pg_read_all_stats TO rol_auditor;
 CREATE ROLE gerente_db LOGIN PASSWORD :'gerente_pw' IN ROLE rol_gerente;
 CREATE ROLE ti_db      LOGIN PASSWORD :'ti_pw'      IN ROLE rol_ti;
 CREATE ROLE auditor_db LOGIN PASSWORD :'auditor_pw' IN ROLE rol_auditor;
+
+-- ===== Usuario de aplicacion: produccion y ventas =====
+-- Lee y escribe solo tablas de negocio; sin acceso a auditoria ni a tablas de seguridad.
+-- Sus cambios quedan en auditoria_datos con usuario = app_produccion (session_user).
+CREATE ROLE app_produccion LOGIN PASSWORD :'app_prod_pw';
+GRANT CONNECT ON DATABASE :"db" TO app_produccion;
+GRANT USAGE ON SCHEMA public TO app_produccion;
+GRANT SELECT, INSERT, UPDATE, DELETE
+  ON lotes_produccion, ventas, clientes, productos, control_calidad, materias_primas
+  TO app_produccion;
+GRANT USAGE ON SEQUENCE lotes_produccion_id_seq, ventas_id_seq, clientes_id_seq,
+                        productos_id_seq, control_calidad_id_seq, materias_primas_id_seq
+  TO app_produccion;
 SQL
 
-echo "[05-roles] agente_ia, rol_gerente, rol_ti, rol_auditor creados"
+echo "[05-roles] agente_ia, rol_gerente, rol_ti, rol_auditor, app_produccion creados"

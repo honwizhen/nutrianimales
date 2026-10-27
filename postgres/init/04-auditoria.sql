@@ -5,16 +5,16 @@ CREATE OR REPLACE FUNCTION fn_auditoria()
 RETURNS TRIGGER AS $$
 BEGIN
   IF TG_OP = 'DELETE' THEN
-    INSERT INTO auditoria_datos (tabla, operacion, fila_id, valor_antes, valor_nuevo)
-    VALUES (TG_TABLE_NAME, 'DELETE', OLD.id, row_to_json(OLD)::jsonb, NULL);
+    INSERT INTO auditoria_datos (tabla, operacion, usuario, fila_id, valor_antes, valor_nuevo)
+    VALUES (TG_TABLE_NAME, 'DELETE', session_user, OLD.id, row_to_json(OLD)::jsonb, NULL);
     RETURN OLD;
   ELSIF TG_OP = 'UPDATE' THEN
-    INSERT INTO auditoria_datos (tabla, operacion, fila_id, valor_antes, valor_nuevo)
-    VALUES (TG_TABLE_NAME, 'UPDATE', NEW.id, row_to_json(OLD)::jsonb, row_to_json(NEW)::jsonb);
+    INSERT INTO auditoria_datos (tabla, operacion, usuario, fila_id, valor_antes, valor_nuevo)
+    VALUES (TG_TABLE_NAME, 'UPDATE', session_user, NEW.id, row_to_json(OLD)::jsonb, row_to_json(NEW)::jsonb);
     RETURN NEW;
   ELSIF TG_OP = 'INSERT' THEN
-    INSERT INTO auditoria_datos (tabla, operacion, fila_id, valor_antes, valor_nuevo)
-    VALUES (TG_TABLE_NAME, 'INSERT', NEW.id, NULL, row_to_json(NEW)::jsonb);
+    INSERT INTO auditoria_datos (tabla, operacion, usuario, fila_id, valor_antes, valor_nuevo)
+    VALUES (TG_TABLE_NAME, 'INSERT', session_user, NEW.id, NULL, row_to_json(NEW)::jsonb);
     RETURN NEW;
   END IF;
   RETURN NULL;
@@ -22,6 +22,8 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 -- SECURITY DEFINER: un usuario con permiso de escritura en ventas puede generar
 -- su registro de auditoria sin tener INSERT directo sobre auditoria_datos.
+-- Dentro de una funcion SECURITY DEFINER current_user es el dueno (postgres),
+-- por eso el usuario se toma de session_user: el login real que hizo el cambio.
 
 CREATE TRIGGER trg_auditoria_lotes
   AFTER INSERT OR UPDATE OR DELETE ON lotes_produccion
