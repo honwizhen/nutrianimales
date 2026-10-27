@@ -106,10 +106,10 @@ services:
     command:
       - run
       - /etc/alloy/config.alloy
-      - --storage.path=/var/lib/alloy/data
+      - --storage.path=/alloy-data
     volumes:
       - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
-      - ./data/alloy:/var/lib/alloy/data
+      - ./data/alloy:/alloy-data
       - /var/log:/host/log:ro
     networks:
       - nutrianimales-net
