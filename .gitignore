@@ -10,3 +10,6 @@ data/
 # Varios
 *.log
 .DS_Store
+
+# Reportes generados (pueden contener consultas)
+reportes/
