@@ -56,7 +56,7 @@ postgres/init/            se ejecuta una vez al crear el volumen:
 loki/loki-config.yaml     almacenamiento local, retencion 30 dias
 alloy/config.alloy        envia /var/log/ufw.log y /var/log/auth.log a Loki
 n8n/workflows/            H1_ufw.json, H2_hash_config.json
-scripts/                  setup.sh, gen-certs.sh, n8n-import.sh, verify.sh
+scripts/                  setup.sh, gen-certs.sh, n8n-import.sh, verify.sh, carga_pgbench.sh, reporte_pgbadger.sh
 ```
 
 ## Hardening: 12 puntos (seccion 10)
@@ -99,6 +99,21 @@ docker exec -it nutri_postgres psql -U postgres -d nutrianimales_db -c "SELECT f
 Cada alerta queda registrada en `alertas_auditoria` y se envia a Telegram con el formato del enunciado. Los flujos corren cada minuto y ademas tienen un disparador "Probar manualmente" para la demo en vivo. `scripts/n8n-import.sh` se puede repetir: despublica, reimporta y vuelve a publicar.
 
 `fn_h5_desviaciones()` ya compara la configuracion contra `pg_settings_baseline` y detecta reglas md5 en pg_hba; el flujo H5 puede usarla directamente.
+
+## Carga con pgbench y reporte con pgBadger
+
+Solo necesitan el servicio `postgres` corriendo y `.env`. Ninguno instala nada en el host.
+
+```bash
+./scripts/carga_pgbench.sh           # esquema bench, 10 clientes, 60 s; termina con el top de pg_stat_statements
+./scripts/carga_pgbench.sh --lenta   # ademas, una consulta de 1.5 s que queda en los logs para R1
+./scripts/reporte_pgbadger.sh        # genera reportes/pgbadger.html a partir de docker logs
+open reportes/pgbadger.html          # macOS; en Ubuntu: xdg-open
+```
+
+- Cada corrida de pgbench recrea las tablas de `bench`. No toca las tablas de negocio ni reinicia `pg_stat_statements`, asi que sus estadisticas son acumuladas.
+- Con `log_min_duration_statement = 1000`, el reporte solo muestra como consultas lentas las de 1 s o mas: la carga normal de pgbench no aparece ahi.
+- En las bases inicializadas a partir de este cambio, las contrasenas de `05-roles.sh` no quedan en `docker logs` ni en `pg_stat_statements`. El enmascarado de `reporte_pgbadger.sh` es una segunda capa para bases creadas antes: esas conservan las contrasenas hasta recrearlas, asi que no capture su `docker logs` sin filtrar.
 
 ## Usuarios de base de datos
 
