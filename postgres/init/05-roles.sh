@@ -17,6 +17,8 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
   -v app_prod_pw="$APP_PRODUCCION_PASSWORD" <<'SQL'
 -- Evita que los CREATE ROLE ... PASSWORD queden en los logs por log_statement = ddl
 SET log_statement = 'none';
+-- Evita que esos mismos CREATE ROLE ... PASSWORD queden en pg_stat_statements, legibles por ti_db y auditor_db
+SET pg_stat_statements.track_utility = off;
 
 -- Nadie hereda permisos por defecto sobre el esquema public
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
