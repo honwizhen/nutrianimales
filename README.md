@@ -113,7 +113,7 @@ open reportes/pgbadger.html          # macOS; en Ubuntu: xdg-open
 
 - Cada corrida de pgbench recrea las tablas de `bench`. No toca las tablas de negocio ni reinicia `pg_stat_statements`, asi que sus estadisticas son acumuladas.
 - Con `log_min_duration_statement = 1000`, el reporte solo muestra como consultas lentas las de 1 s o mas: la carga normal de pgbench no aparece ahi.
-- El log incluye en texto plano las contrasenas de `05-roles.sh` (por `log_statement = ddl`). El script las enmascara antes de generar el reporte, pero `docker logs` las sigue mostrando: no lo capture sin filtrar.
+- En las bases inicializadas a partir de este cambio, las contrasenas de `05-roles.sh` no quedan en `docker logs` ni en `pg_stat_statements`. El enmascarado de `reporte_pgbadger.sh` es una segunda capa para bases creadas antes: esas conservan las contrasenas hasta recrearlas, asi que no capture su `docker logs` sin filtrar.
 
 ## Usuarios de base de datos
 
