@@ -28,8 +28,8 @@ if [ "$(ajuste logging_collector)" != "off" ] || [ "$(ajuste log_destination)" !
 fi
 PREFIJO=$(ajuste log_line_prefix)   # el prefijo real, para no duplicar el de postgresql.conf
 
-# log_statement=ddl deja en el log el CREATE ROLE ... PASSWORD de 05-roles.sh en texto plano.
-# Se enmascara antes de que el log llegue a pgBadger.
+# Segunda capa para bases creadas antes del arreglo de 05-roles.sh: en esas, log_statement=ddl
+# dejo el CREATE ROLE ... PASSWORD en el log. Se enmascara antes de que llegue a pgBadger.
 docker logs "$CONTENEDOR" 2>&1 \
   | sed -E "s/([Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd][[:space:]]+)'[^']*'/\1'***'/g" > "$LOG_TEMP"
 
