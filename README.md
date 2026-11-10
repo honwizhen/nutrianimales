@@ -109,7 +109,23 @@ Antes de importarlo, en la interfaz de N8N (una sola vez):
 2. Data Table `bot_config` con columnas `clave` y `valor` (string) y una fila `telegram_bot_token` = token del bot. `getUpdates` necesita el token en la URL y ninguna credencial de N8N puede ponerlo ahi.
 3. Despues de importar, cambiar el chat autorizado en el nodo "Configuración" si no es el mismo.
 
-El token de `bot_config` queda en texto plano en la base de N8N (igual que antes en `$env`); si se rota en BotFather, actualizar la credencial y la fila.
+Si el token se rota en BotFather, actualizar la credencial y la fila de `bot_config`.
+
+### Por que el token esta en una Data Table
+
+Lo ideal seria que todo el bot usara la credencial cifrada `Telegram NutriAnimales`, pero en N8N 2.44 no se puede para leer mensajes:
+- **HTTP Request con "Predefined Credential Type" → Telegram API:** N8N solo agrega a la peticion lo que la credencial declara en `authenticate` (headers, query o body). `telegramApi` no define `authenticate` y Telegram exige el token en la ruta (`/bot<token>/getUpdates`). Probado: la peticion sale sin token y Telegram responde `404 Not Found`.
+- **Nodo Telegram:** usa la credencial, pero solo para sus operaciones fijas (`sendMessage`, `getChat`, ...). `getUpdates` esta comentado en el codigo del nodo y `deleteWebhook` solo lo usa el Telegram Trigger. Por eso las **respuestas** si usan la credencial cifrada.
+
+Alternativas evaluadas y descartadas:
+- **Proxy interno** (`nginx` sin puertos que agrega el token desde `.env` y solo reenvia `/getUpdates` y `/deleteWebhook`): saca el token de N8N, pero agrega un servicio y una red mas al compose solo para esto, y el token sigue visible con `docker inspect`.
+- **Webhook con Telegram Trigger** (solo credencial cifrada): Telegram necesita llegar a N8N por HTTPS publico. En la VM exige dominio con certificado valido y abrir el 8443 a internet; en local, un tunel cloudflared. Contradice el hardening 4 (nada expuesto).
+
+Mitigaciones aplicadas:
+- El flujo no guarda datos de ninguna ejecucion: `saveDataSuccessExecution`, `saveDataErrorExecution` = `none`, `saveManualExecutions` y `saveExecutionProgress` = `false`. La salida del nodo "Leer token" nunca queda en `execution_data`. Para depurar, activarlas temporalmente y borrar esas ejecuciones despues.
+- El token no esta en el JSON del repositorio ni en `$env` (`N8N_BLOCK_ENV_ACCESS_IN_NODE=true`); el JSON solo tiene el chat ID, que no es secreto.
+- `data/n8n` con chmod 700 (hardening 10): solo el dueno lee la base de N8N.
+- N8N no publica puertos: solo se llega por Nginx, con usuario owner.
 
 ## Carga con pgbench y reporte con pgBadger
 
