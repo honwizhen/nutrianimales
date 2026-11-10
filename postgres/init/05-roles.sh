@@ -32,6 +32,8 @@ GRANT CONNECT ON DATABASE :"db" TO agente_ia;
 GRANT USAGE ON SCHEMA public TO agente_ia;
 GRANT SELECT ON plantas, productos, materias_primas, lotes_produccion,
                 clientes, ventas, control_calidad, gastos TO agente_ia;
+-- El bot de Telegram responde las preguntas del gerente usando las vistas de reportes
+GRANT SELECT ON v_ventas_resumen, v_produccion_por_planta, v_clientes TO agente_ia;
 ALTER ROLE agente_ia SET statement_timeout = '30s';
 
 -- ===== RBAC: tres roles (seccion 7) =====
