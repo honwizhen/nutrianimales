@@ -35,16 +35,73 @@
       }
     },
     {
-      "id": "bot-2",
-      "name": "Offset",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "id": "bot-cfg",
+      "name": "Configuración",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
       "position": [
         220,
         0
       ],
       "parameters": {
-        "jsCode": "// Siguiente update_id a pedir a Telegram (persistente entre ejecuciones)\nconst estado = $getWorkflowStaticData('global');\nreturn [{ json: { offset: estado.offset ?? 0 } }];"
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-chat",
+              "name": "chat_id_autorizado",
+              "value": "6870541835",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "bot-tok",
+      "name": "Leer token",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "bot_config"
+        },
+        "matchType": "anyCondition",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "clave",
+              "condition": "eq",
+              "keyValue": "telegram_bot_token"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "bot-2",
+      "name": "Offset",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Siguiente update_id a pedir a Telegram (persistente entre ejecuciones)\nif (!$('Leer token').first()?.json?.valor) {\n  throw new Error('Falta la fila clave=telegram_bot_token en la Data Table bot_config');\n}\nconst estado = $getWorkflowStaticData('global');\nreturn [{ json: { offset: estado.offset ?? 0 } }];"
       }
     },
     {
@@ -53,11 +110,11 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        440,
+        880,
         0
       ],
       "parameters": {
-        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/getUpdates",
+        "url": "=https://api.telegram.org/bot{{ $('Leer token').first().json.valor }}/getUpdates",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -95,11 +152,11 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        660,
+        1100,
         0
       ],
       "parameters": {
-        "jsCode": "// Un solo update por ejecucion (getUpdates con limit=1). El offset se guarda en los datos estaticos del flujo.\nconst estado = $getWorkflowStaticData('global');\nconst r = $input.first().json;\nif (!r.ok) {\n  // 409: hay un webhook registrado y Telegram no permite getUpdates. Se borra una vez.\n  if (r.error_code === 409) return [{ json: { accion: 'deleteWebhook' } }];\n  throw new Error(`getUpdates fallo: ${r.error_code} ${r.description}`);\n}\nconst u = (r.result || [])[0];\nif (!u) return [];\nestado.offset = u.update_id + 1;\nconst m = u.message;\n// Solo el chat autorizado. Otros chats, ediciones, fotos, etc. se ignoran en silencio.\nif (!m || String(m.chat?.id) !== String($env.TELEGRAM_CHAT_ID) || typeof m.text !== 'string') return [];\nconst f = m.from || {};\nreturn [{ json: {\n  accion: 'pregunta',\n  offset_siguiente: u.update_id + 1,\n  chat_id: m.chat.id,\n  message_id: m.message_id,\n  fecha: m.date,\n  usuario: [[f.first_name, f.last_name].filter(Boolean).join(' '), f.username ? '@' + f.username : null, 'id ' + f.id].filter(Boolean).join(', '),\n  texto: m.text.slice(0, 1000)\n} }];"
+        "jsCode": "// Un solo update por ejecucion (getUpdates con limit=1). El offset se guarda en los datos estaticos del flujo.\nconst estado = $getWorkflowStaticData('global');\nconst r = $input.first().json;\nif (!r.ok) {\n  // 409: hay un webhook registrado y Telegram no permite getUpdates. Se borra una vez.\n  if (r.error_code === 409) return [{ json: { accion: 'deleteWebhook' } }];\n  throw new Error(`getUpdates fallo: ${r.error_code} ${r.description}`);\n}\nconst u = (r.result || [])[0];\nif (!u) return [];\nestado.offset = u.update_id + 1;\nconst m = u.message;\n// Solo el chat autorizado. Otros chats, ediciones, fotos, etc. se ignoran en silencio.\nif (!m || String(m.chat?.id) !== String($('Configuración').first().json.chat_id_autorizado) || typeof m.text !== 'string') return [];\nconst f = m.from || {};\nreturn [{ json: {\n  accion: 'pregunta',\n  offset_siguiente: u.update_id + 1,\n  chat_id: m.chat.id,\n  message_id: m.message_id,\n  fecha: m.date,\n  usuario: [[f.first_name, f.last_name].filter(Boolean).join(' '), f.username ? '@' + f.username : null, 'id ' + f.id].filter(Boolean).join(', '),\n  texto: m.text.slice(0, 1000)\n} }];"
       }
     },
     {
@@ -108,7 +165,7 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
       "position": [
-        880,
+        1320,
         0
       ],
       "parameters": {
@@ -123,12 +180,12 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1100,
+        1540,
         -200
       ],
       "parameters": {
         "method": "POST",
-        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/deleteWebhook",
+        "url": "=https://api.telegram.org/bot{{ $('Leer token').first().json.valor }}/deleteWebhook",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -149,11 +206,11 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1100,
+        1540,
         0
       ],
       "parameters": {
-        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/getUpdates",
+        "url": "=https://api.telegram.org/bot{{ $('Leer token').first().json.valor }}/getUpdates",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -187,7 +244,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1320,
+        1760,
         0
       ],
       "parameters": {
@@ -200,7 +257,7 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
       "position": [
-        1540,
+        1980,
         0
       ],
       "parameters": {
@@ -215,7 +272,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1760,
+        2200,
         100
       ],
       "parameters": {
@@ -248,7 +305,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1980,
+        2420,
         100
       ],
       "parameters": {
@@ -261,7 +318,7 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
       "position": [
-        2200,
+        2640,
         100
       ],
       "parameters": {
@@ -276,7 +333,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        2420,
+        2860,
         0
       ],
       "parameters": {
@@ -299,7 +356,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2640,
+        3080,
         0
       ],
       "parameters": {
@@ -312,7 +369,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2420,
+        2860,
         -250
       ],
       "parameters": {
@@ -325,7 +382,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        2640,
+        3080,
         -250
       ],
       "parameters": {
@@ -348,7 +405,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        2880,
+        3320,
         0
       ],
       "parameters": {
@@ -373,7 +430,7 @@
       "main": [
         [
           {
-            "node": "Offset",
+            "node": "Configuración",
             "type": "main",
             "index": 0
           }
@@ -381,6 +438,28 @@
       ]
     },
     "Cada 10 segundos": {
+      "main": [
+        [
+          {
+            "node": "Configuración",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configuración": {
+      "main": [
+        [
+          {
+            "node": "Leer token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer token": {
       "main": [
         [
           {
