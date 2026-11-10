@@ -657,7 +657,9 @@
     "executionOrder": "v1",
     "timezone": "America/Costa_Rica",
     "saveDataSuccessExecution": "none",
-    "saveDataErrorExecution": "all"
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false
   },
   "pinData": {},
   "tags": []
