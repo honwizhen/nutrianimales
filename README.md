@@ -100,6 +100,17 @@ Cada alerta queda registrada en `alertas_auditoria` y se envia a Telegram con el
 
 `fn_h5_desviaciones()` ya compara la configuracion contra `pg_settings_baseline` y detecta reglas md5 en pg_hba; el flujo H5 puede usarla directamente.
 
+## Bot de Telegram (agente_ia + Groq)
+
+`n8n/workflows/bot_telegram.json` lee los mensajes con `getUpdates` cada 10 s (sin webhook ni puerto publico), filtra el ataque A2, traduce la pregunta a un SELECT con Groq, lo valida otra vez y lo ejecuta como `agente_ia`. Los intentos bloqueados quedan en `alertas_auditoria` (`datos`, `A2`, `critica`). No usa `$env`, asi que funciona con `N8N_BLOCK_ENV_ACCESS_IN_NODE=true`.
+
+Antes de importarlo, en la interfaz de N8N (una sola vez):
+1. Credenciales con estos nombres exactos: `Telegram NutriAnimales` (Telegram API), `Groq API` (Header Auth: `Authorization` = `Bearer <GROQ_API_KEY>`), `Postgres agente_ia` y `Postgres ti_db` (host `postgres`, SSL Require, Ignore SSL Issues).
+2. Data Table `bot_config` con columnas `clave` y `valor` (string) y una fila `telegram_bot_token` = token del bot. `getUpdates` necesita el token en la URL y ninguna credencial de N8N puede ponerlo ahi.
+3. Despues de importar, cambiar el chat autorizado en el nodo "Configuración" si no es el mismo.
+
+El token de `bot_config` queda en texto plano en la base de N8N (igual que antes en `$env`); si se rota en BotFather, actualizar la credencial y la fila.
+
 ## Carga con pgbench y reporte con pgBadger
 
 Solo necesitan el servicio `postgres` corriendo y `.env`. Ninguno instala nada en el host.
