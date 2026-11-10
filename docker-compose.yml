@@ -55,6 +55,8 @@ services:
       N8N_DIAGNOSTICS_ENABLED: "false"
       N8N_PERSONALIZATION_ENABLED: "false"
       N8N_LOG_LEVEL: info
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: 168
       # Secretos accesibles con $env en los flujos (seccion 9)
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       GROQ_API_KEY: ${GROQ_API_KEY}
