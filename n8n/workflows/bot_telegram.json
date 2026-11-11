@@ -35,16 +35,73 @@
       }
     },
     {
-      "id": "bot-2",
-      "name": "Offset",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "id": "bot-cfg",
+      "name": "Configuración",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
       "position": [
         220,
         0
       ],
       "parameters": {
-        "jsCode": "// Siguiente update_id a pedir a Telegram (persistente entre ejecuciones)\nconst estado = $getWorkflowStaticData('global');\nreturn [{ json: { offset: estado.offset ?? 0 } }];"
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-chat",
+              "name": "chat_id_autorizado",
+              "value": "6870541835",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "bot-tok",
+      "name": "Leer token",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "bot_config"
+        },
+        "matchType": "anyCondition",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "clave",
+              "condition": "eq",
+              "keyValue": "telegram_bot_token"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "bot-2",
+      "name": "Offset",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Siguiente update_id a pedir a Telegram (persistente entre ejecuciones)\nif (!$('Leer token').first()?.json?.valor) {\n  throw new Error('Falta la fila clave=telegram_bot_token en la Data Table bot_config');\n}\nconst estado = $getWorkflowStaticData('global');\nreturn [{ json: { offset: estado.offset ?? 0 } }];"
       }
     },
     {
@@ -53,11 +110,11 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        440,
+        880,
         0
       ],
       "parameters": {
-        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/getUpdates",
+        "url": "=https://api.telegram.org/bot{{ $('Leer token').first().json.valor }}/getUpdates",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -95,11 +152,11 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        660,
+        1100,
         0
       ],
       "parameters": {
-        "jsCode": "// Un solo update por ejecucion (getUpdates con limit=1). El offset se guarda en los datos estaticos del flujo.\nconst estado = $getWorkflowStaticData('global');\nconst r = $input.first().json;\nif (!r.ok) {\n  // 409: hay un webhook registrado y Telegram no permite getUpdates. Se borra una vez.\n  if (r.error_code === 409) return [{ json: { accion: 'deleteWebhook' } }];\n  throw new Error(`getUpdates fallo: ${r.error_code} ${r.description}`);\n}\nconst u = (r.result || [])[0];\nif (!u) return [];\nestado.offset = u.update_id + 1;\nconst m = u.message;\n// Solo el chat autorizado. Otros chats, ediciones, fotos, etc. se ignoran en silencio.\nif (!m || String(m.chat?.id) !== String($env.TELEGRAM_CHAT_ID) || typeof m.text !== 'string') return [];\nconst f = m.from || {};\nreturn [{ json: {\n  accion: 'pregunta',\n  offset_siguiente: u.update_id + 1,\n  chat_id: m.chat.id,\n  message_id: m.message_id,\n  fecha: m.date,\n  usuario: [[f.first_name, f.last_name].filter(Boolean).join(' '), f.username ? '@' + f.username : null, 'id ' + f.id].filter(Boolean).join(', '),\n  texto: m.text.slice(0, 1000)\n} }];"
+        "jsCode": "// Un solo update por ejecucion (getUpdates con limit=1). El offset se guarda en los datos estaticos del flujo.\nconst estado = $getWorkflowStaticData('global');\nconst r = $input.first().json;\nif (!r.ok) {\n  // 409: hay un webhook registrado y Telegram no permite getUpdates. Se borra una vez.\n  if (r.error_code === 409) return [{ json: { accion: 'deleteWebhook' } }];\n  throw new Error(`getUpdates fallo: ${r.error_code} ${r.description}`);\n}\nconst u = (r.result || [])[0];\nif (!u) return [];\nestado.offset = u.update_id + 1;\nconst m = u.message;\n// Solo el chat autorizado. Otros chats, ediciones, fotos, etc. se ignoran en silencio.\nif (!m || String(m.chat?.id) !== String($('Configuración').first().json.chat_id_autorizado) || typeof m.text !== 'string') return [];\nconst f = m.from || {};\nreturn [{ json: {\n  accion: 'pregunta',\n  offset_siguiente: u.update_id + 1,\n  chat_id: m.chat.id,\n  message_id: m.message_id,\n  fecha: m.date,\n  usuario: [[f.first_name, f.last_name].filter(Boolean).join(' '), f.username ? '@' + f.username : null, 'id ' + f.id].filter(Boolean).join(', '),\n  texto: m.text.slice(0, 1000)\n} }];"
       }
     },
     {
@@ -108,7 +165,7 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
       "position": [
-        880,
+        1320,
         0
       ],
       "parameters": {
@@ -123,12 +180,12 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1100,
+        1540,
         -200
       ],
       "parameters": {
         "method": "POST",
-        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/deleteWebhook",
+        "url": "=https://api.telegram.org/bot{{ $('Leer token').first().json.valor }}/deleteWebhook",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -149,11 +206,11 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1100,
+        1540,
         0
       ],
       "parameters": {
-        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/getUpdates",
+        "url": "=https://api.telegram.org/bot{{ $('Leer token').first().json.valor }}/getUpdates",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -187,7 +244,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1320,
+        1760,
         0
       ],
       "parameters": {
@@ -200,7 +257,7 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
       "position": [
-        1540,
+        1980,
         0
       ],
       "parameters": {
@@ -215,7 +272,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1760,
+        2200,
         100
       ],
       "parameters": {
@@ -248,7 +305,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1980,
+        2420,
         100
       ],
       "parameters": {
@@ -261,7 +318,7 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
       "position": [
-        2200,
+        2640,
         100
       ],
       "parameters": {
@@ -276,7 +333,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        2420,
+        2860,
         0
       ],
       "parameters": {
@@ -299,11 +356,11 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2640,
+        3080,
         0
       ],
       "parameters": {
-        "jsCode": "// Resume el resultado para Telegram (limite de 4096 caracteres por mensaje)\nconst p = $('Validar SQL').first().json;\nconst items = $input.all().map(i => i.json);\nconst err = items[0]?.error;\nif (err) {\n  const msg = typeof err === 'string' ? err : (err.message || items[0].message || JSON.stringify(err));\n  return [{ json: { respuesta: `La consulta falló: ${msg.slice(0, 300)}` } }];\n}\nconst filas = items.filter(r => Object.keys(r).length && !(Object.keys(r).length === 1 && 'success' in r));\nconst MAX = 20;\nconst fmt = v => v === null || v === undefined ? '-' : (v instanceof Date ? v.toISOString() : String(v)).slice(0, 60);\nconst lineas = [`Pregunta: ${p.texto.slice(0, 200)}`, `Filas: ${filas.length}${filas.length > MAX ? ` (se muestran ${MAX})` : ''}`];\nif (filas.length) {\n  const cols = Object.keys(filas[0]);\n  lineas.push('', cols.join(' | '));\n  for (const f of filas.slice(0, MAX)) lineas.push(cols.map(c => fmt(f[c])).join(' | '));\n} else {\n  lineas.push('', 'Sin resultados.');\n}\nlineas.push('', `SQL: ${p.sql}`);\nlet respuesta = lineas.join('\\n');\nif (respuesta.length > 3900) respuesta = respuesta.slice(0, 3900) + '\\n...(recortado)';\nreturn [{ json: { respuesta } }];"
+        "jsCode": "// Resume el resultado para Telegram (limite de 4096 caracteres por mensaje)\nconst p = $('Validar SQL').first().json;\nconst items = $input.all().map(i => i.json);\nconst err = items[0]?.error;\nif (err) {\n  const msg = typeof err === 'string' ? err : (err.message || items[0].message || JSON.stringify(err));\n  return [{ json: { respuesta: `La consulta falló: ${msg.slice(0, 300)}` } }];\n}\nconst filas = items.filter(r => Object.keys(r).length && !(Object.keys(r).length === 1 && 'success' in r));\nconst MAX = 20;\n// Fechas: Postgres las entrega en hora local de Costa Rica y llegan como ISO en UTC (con Z).\n// Se vuelven a la fecha local sin hora: 2026-01 si es inicio de mes, 2026-10-07 si no.\nconst ZONA = 'America/Costa_Rica';\nconst partes = d => Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: ZONA, year: 'numeric',\n  month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })\n  .formatToParts(d).map(x => [x.type, x.value]));\nconst fecha = d => {\n  const p = partes(d);\n  const inicioDeMes = p.day === '01' && p.hour === '00' && p.minute === '00' && p.second === '00';\n  return inicioDeMes ? `${p.year}-${p.month}` : `${p.year}-${p.month}-${p.day}`;\n};\n// Montos: los NUMERIC con decimales llevan separador de miles y 2 decimales. Enteros (conteos, anos, ids) sin cambios.\nconst monto = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });\nconst fmt = (v, col) => {\n  if (v === null || v === undefined) return '-';\n  if (v instanceof Date) return fecha(v);\n  const s = String(v);\n  if (/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})$/.test(s)) return fecha(new Date(s));\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) return fecha(new Date(`${s}T00:00:00-06:00`));\n  if (/^-?\\d+\\.\\d+$/.test(s) && !/(^|_)id$/i.test(col)) return monto.format(Number(s));\n  return s.slice(0, 60);\n};\nconst lineas = [`Pregunta: ${p.texto.slice(0, 200)}`, `Filas: ${filas.length}${filas.length > MAX ? ` (se muestran ${MAX})` : ''}`];\nif (filas.length) {\n  const cols = Object.keys(filas[0]);\n  lineas.push('', cols.join(' | '));\n  for (const f of filas.slice(0, MAX)) lineas.push(cols.map(c => fmt(f[c], c)).join(' | '));\n} else {\n  lineas.push('', 'Sin resultados.');\n}\nlineas.push('', `SQL: ${p.sql}`);\nlet respuesta = lineas.join('\\n');\nif (respuesta.length > 3900) respuesta = respuesta.slice(0, 3900) + '\\n...(recortado)';\nreturn [{ json: { respuesta } }];"
       }
     },
     {
@@ -312,7 +369,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2420,
+        2860,
         -250
       ],
       "parameters": {
@@ -325,7 +382,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        2640,
+        3080,
         -250
       ],
       "parameters": {
@@ -348,7 +405,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        2880,
+        3320,
         0
       ],
       "parameters": {
@@ -373,7 +430,7 @@
       "main": [
         [
           {
-            "node": "Offset",
+            "node": "Configuración",
             "type": "main",
             "index": 0
           }
@@ -381,6 +438,28 @@
       ]
     },
     "Cada 10 segundos": {
+      "main": [
+        [
+          {
+            "node": "Configuración",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configuración": {
+      "main": [
+        [
+          {
+            "node": "Leer token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer token": {
       "main": [
         [
           {
@@ -578,7 +657,9 @@
     "executionOrder": "v1",
     "timezone": "America/Costa_Rica",
     "saveDataSuccessExecution": "none",
-    "saveDataErrorExecution": "all"
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false
   },
   "pinData": {},
   "tags": []
