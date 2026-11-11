@@ -1,0 +1,666 @@
+{
+  "id": "nutriBotTg000001",
+  "name": "Bot Telegram - Consultas del gerente (agente_ia + Groq)",
+  "active": false,
+  "nodes": [
+    {
+      "id": "bot-0",
+      "name": "Probar manualmente",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "bot-1",
+      "name": "Cada 10 segundos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 10
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bot-cfg",
+      "name": "Configuración",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-chat",
+              "name": "chat_id_autorizado",
+              "value": "6870541835",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "bot-tok",
+      "name": "Leer token",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "bot_config"
+        },
+        "matchType": "anyCondition",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "clave",
+              "condition": "eq",
+              "keyValue": "telegram_bot_token"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "bot-2",
+      "name": "Offset",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Siguiente update_id a pedir a Telegram (persistente entre ejecuciones)\nif (!$('Leer token').first()?.json?.valor) {\n  throw new Error('Falta la fila clave=telegram_bot_token en la Data Table bot_config');\n}\nconst estado = $getWorkflowStaticData('global');\nreturn [{ json: { offset: estado.offset ?? 0 } }];"
+      }
+    },
+    {
+      "id": "bot-3",
+      "name": "getUpdates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "url": "=https://api.telegram.org/bot{{ $('Leer token').first().json.valor }}/getUpdates",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "offset",
+              "value": "={{ $json.offset }}"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            },
+            {
+              "name": "timeout",
+              "value": "0"
+            },
+            {
+              "name": "allowed_updates",
+              "value": "[\"message\"]"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 15000
+        }
+      }
+    },
+    {
+      "id": "bot-4",
+      "name": "Leer update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Un solo update por ejecucion (getUpdates con limit=1). El offset se guarda en los datos estaticos del flujo.\nconst estado = $getWorkflowStaticData('global');\nconst r = $input.first().json;\nif (!r.ok) {\n  // 409: hay un webhook registrado y Telegram no permite getUpdates. Se borra una vez.\n  if (r.error_code === 409) return [{ json: { accion: 'deleteWebhook' } }];\n  throw new Error(`getUpdates fallo: ${r.error_code} ${r.description}`);\n}\nconst u = (r.result || [])[0];\nif (!u) return [];\nestado.offset = u.update_id + 1;\nconst m = u.message;\n// Solo el chat autorizado. Otros chats, ediciones, fotos, etc. se ignoran en silencio.\nif (!m || String(m.chat?.id) !== String($('Configuración').first().json.chat_id_autorizado) || typeof m.text !== 'string') return [];\nconst f = m.from || {};\nreturn [{ json: {\n  accion: 'pregunta',\n  offset_siguiente: u.update_id + 1,\n  chat_id: m.chat.id,\n  message_id: m.message_id,\n  fecha: m.date,\n  usuario: [[f.first_name, f.last_name].filter(Boolean).join(' '), f.username ? '@' + f.username : null, 'id ' + f.id].filter(Boolean).join(', '),\n  texto: m.text.slice(0, 1000)\n} }];"
+      }
+    },
+    {
+      "id": "bot-5",
+      "name": "Tipo de update",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1320,
+        0
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 2,
+        "output": "={{ $json.accion === 'deleteWebhook' ? 0 : 1 }}"
+      }
+    },
+    {
+      "id": "bot-6",
+      "name": "deleteWebhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        -200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $('Leer token').first().json.valor }}/deleteWebhook",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "drop_pending_updates",
+              "value": "false"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      }
+    },
+    {
+      "id": "bot-7",
+      "name": "Confirmar update",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        0
+      ],
+      "parameters": {
+        "url": "=https://api.telegram.org/bot{{ $('Leer token').first().json.valor }}/getUpdates",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "offset",
+              "value": "={{ $json.offset_siguiente }}"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            },
+            {
+              "name": "timeout",
+              "value": "0"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 15000
+        }
+      }
+    },
+    {
+      "id": "bot-8",
+      "name": "Filtro A2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Filtro A2: revisa la pregunta ANTES de enviarla a Groq\nconst REGLAS = [\n  [/;/, ';'],\n  [/--/, '--'],\n  [/\\/\\*|\\*\\//, '/* */'],\n  [/\\b(drop|delete|update|insert|alter|grant|revoke|truncate|create|copy|merge|execute|exec|call|do|vacuum|reindex|cluster|lock|comment|reset|listen|notify|prepare|deallocate|set\\s+role|set\\s+session|pg_sleep|pg_read_file|pg_read_binary_file|pg_ls_dir|pg_terminate_backend|pg_cancel_backend|lo_import|lo_export|dblink|set_config)\\b/gi, null]\n];\nconst detectar = (s) => {\n  const hallados = new Set();\n  for (const [re, nombre] of REGLAS) {\n    for (const m of s.matchAll(new RegExp(re.source, 'gi'))) hallados.add(nombre ?? m[0].replace(/\\s+/g, ' ').toUpperCase());\n  }\n  return [...hallados];\n};\nconst u = $('Leer update').first().json;\nconst texto = u.texto.normalize('NFKC');   // evita variantes como el punto y coma de ancho completo\nconst patrones = detectar(texto);\nif (patrones.length) {\n  return [{ json: { ...u, bloqueado: true, etapa: 'Filtro de entrada (antes de Groq)', patrones } }];\n}\nreturn [{ json: { ...u, bloqueado: false, groq: {\n  model: 'openai/gpt-oss-120b',\n  temperature: 0,\n  reasoning_effort: 'low',\n  max_completion_tokens: 1024,\n  messages: [\n    { role: 'system', content: \"Eres el traductor de preguntas a SQL del bot de NutriAnimales S.A. (PostgreSQL 16).\\nResponde UNICAMENTE con una sentencia SELECT de PostgreSQL, en una sola linea, sin explicacion, sin markdown, sin punto y coma y sin comentarios.\\nReglas:\\n- Solo SELECT. Nunca WITH, INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, GRANT, COPY ni ninguna otra sentencia.\\n- Solo puedes leer las vistas y tablas de esta lista; no uses pg_catalog, information_schema ni funciones del sistema.\\n- Prefiere las vistas v_* para resumenes. Limita el resultado a 50 filas como maximo.\\n- Para cualquier dato de clientes usa siempre la vista v_clientes (tipo 'distribuidor'|'empresa'|'persona', segmento 'corporativo'|'mayorista'|'minorista'); no existe otra fuente de clientes. Nunca devuelvas correos ni datos de contacto.\\n- Para preguntas por cliente y producto, une ventas con v_clientes (ventas.cliente_id = v_clientes.id) y con productos (ventas.producto_id = productos.id). Para totales por mes o por tipo de animal, agrupa con GROUP BY.\\n- Si la pregunta no se puede responder con estos datos, pide modificar algo o no es una pregunta sobre el negocio, responde exactamente: NO_SQL\\n\\nVistas de reportes:\\n- v_ventas_resumen(mes date, producto_codigo, producto, tipo_animal, estado, num_ventas, cantidad_total, monto_total): ventas agrupadas por mes, producto y estado\\n- v_produccion_por_planta(planta, capacidad_produccion, estado, num_lotes, cantidad_total, primer_lote, ultimo_lote): lotes por planta y estado\\n- v_clientes(id, nombre, tipo, segmento, compras_completadas, monto_comprado, ultima_compra): clientes con su volumen de compras\\n\\nTablas:\\n- plantas(id, nombre, ubicacion, capacidad_produccion toneladas/mes, estado 'activa')\\n- productos(id, codigo, nombre, tipo 'aves'|'cerdos'|'ganado'|'peces', precio_unitario, activo)\\n- materias_primas(id, nombre, categoria 'aditivo'|'cereal'|'energia'|'mineral'|'proteina', stock_actual, stock_minimo, proveedor)\\n- lotes_produccion(id, codigo, planta_id -> plantas, producto_id -> productos, cantidad_producida, fecha_inicio timestamp, estado 'completado'|'en_proceso'|'retenido')\\n- ventas(id, cliente_id -> v_clientes.id,producto_id -> productos, cantidad, precio_total, fecha timestamp, estado 'completada'|'pendiente'|'anulada')\\n- control_calidad(id, lote_id -> lotes_produccion, parametro 'cenizas'|'fibra'|'grasa'|'humedad'|'proteina', valor_obtenido, valor_esperado, aprobado boolean)\\n- gastos(id, categoria 'energia'|'mantenimiento'|'materia_prima'|'planilla'|'transporte', descripcion, monto, fecha date, aprobado_por)\\n\\nSinonimos de tipo de animal (productos.tipo y v_ventas_resumen.tipo_animal):\\n- pollo, pollos, gallina, gallinas -> 'aves'\\n- cerdo, cerdos, chancho, chanchos -> 'cerdos'\\n- vaca, vacas, res, reses -> 'ganado'\\n- pescado, pescados, tilapia -> 'peces'\\n\\nMontos en colones. Fechas en hora de Costa Rica.\" },\n    { role: 'user', content: texto }\n  ]\n} } }];"
+      }
+    },
+    {
+      "id": "bot-9",
+      "name": "Bloqueado?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1980,
+        0
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 2,
+        "output": "={{ $json.bloqueado ? 0 : 1 }}"
+      }
+    },
+    {
+      "id": "bot-10",
+      "name": "Groq: pregunta a SQL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.groq) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nutriGroqApi01",
+          "name": "Groq API"
+        }
+      }
+    },
+    {
+      "id": "bot-11",
+      "name": "Validar SQL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        100
+      ],
+      "parameters": {
+        "jsCode": "// Segunda validacion A2: el SQL que devuelve Groq se revisa antes de ejecutarlo\nconst REGLAS = [\n  [/;/, ';'],\n  [/--/, '--'],\n  [/\\/\\*|\\*\\//, '/* */'],\n  [/\\b(drop|delete|update|insert|alter|grant|revoke|truncate|create|copy|merge|execute|exec|call|do|vacuum|reindex|cluster|lock|comment|reset|listen|notify|prepare|deallocate|set\\s+role|set\\s+session|pg_sleep|pg_read_file|pg_read_binary_file|pg_ls_dir|pg_terminate_backend|pg_cancel_backend|lo_import|lo_export|dblink|set_config)\\b/gi, null]\n];\nconst detectar = (s) => {\n  const hallados = new Set();\n  for (const [re, nombre] of REGLAS) {\n    for (const m of s.matchAll(new RegExp(re.source, 'gi'))) hallados.add(nombre ?? m[0].replace(/\\s+/g, ' ').toUpperCase());\n  }\n  return [...hallados];\n};\nconst { groq, ...p } = $('Filtro A2').first().json;\nconst r = $input.first().json;\nif (r.error || !r.choices) {\n  return [{ json: { ...p, estado: 'sin_sql', respuesta: 'No pude generar la consulta en este momento (error de Groq). Intente de nuevo en unos minutos.' } }];\n}\nlet sql = (r.choices[0].message?.content || '').normalize('NFKC').trim()\n  .replace(/^```(?:sql)?\\s*/i, '').replace(/\\s*```$/, '').trim();\nif (!sql || /^NO_SQL$/i.test(sql)) {\n  return [{ json: { ...p, estado: 'sin_sql', respuesta: 'No puedo responder eso con los datos de reportes. Ejemplos: \"Cuanto vendimos por mes este ano\", \"Produccion por planta\", \"Top 5 clientes por monto comprado\".' } }];\n}\nsql = sql.replace(/;\\s*$/, '');   // se tolera un solo ; final; cualquier otro bloquea\nconst patrones = detectar(sql);\nif (!/^select\\b/i.test(sql)) patrones.unshift('no empieza con SELECT');\nif (/\\binto\\b/i.test(sql)) patrones.push('INTO');\nif (/\\b(pg_\\w+|information_schema|current_setting)\\b/i.test(sql)) patrones.push('catalogo del sistema');\n// El bot solo puede usar v_clientes (sin correos). La tabla clientes queda para agente_ia directo (ataque A5).\n// Se ignoran literales y alias \"AS clientes\" para no generar falsas alertas; v_clientes no coincide por el \"_\".\nconst sinLiterales = sql.replace(/'(?:[^']|'')*'/g, \"''\").replace(/\\bas\\s+\"?clientes\"?/gi, 'AS x');\nif (/\\bclientes\\b/i.test(sinLiterales)) patrones.push('tabla clientes (usar v_clientes)');\nif (patrones.length) {\n  return [{ json: { ...p, estado: 'bloqueado', etapa: 'Validacion del SQL generado por Groq', patrones, sql_generado: sql.slice(0, 500) } }];\n}\n// Una sola sentencia y como maximo 50 filas\nreturn [{ json: { ...p, estado: 'ok', sql: `SELECT * FROM (${sql}) AS consulta LIMIT 50` } }];"
+      }
+    },
+    {
+      "id": "bot-12",
+      "name": "SQL valido?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        2640,
+        100
+      ],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{ { ok: 0, bloqueado: 1, sin_sql: 2 }[$json.estado] }}"
+      }
+    },
+    {
+      "id": "bot-13",
+      "name": "Ejecutar como agente_ia",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2860,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "nutriPgAgente01",
+          "name": "Postgres agente_ia"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "bot-14",
+      "name": "Resumir resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Resume el resultado para Telegram (limite de 4096 caracteres por mensaje)\nconst p = $('Validar SQL').first().json;\nconst items = $input.all().map(i => i.json);\nconst err = items[0]?.error;\nif (err) {\n  const msg = typeof err === 'string' ? err : (err.message || items[0].message || JSON.stringify(err));\n  return [{ json: { respuesta: `La consulta falló: ${msg.slice(0, 300)}` } }];\n}\nconst filas = items.filter(r => Object.keys(r).length && !(Object.keys(r).length === 1 && 'success' in r));\nconst MAX = 20;\n// Fechas: Postgres las entrega en hora local de Costa Rica y llegan como ISO en UTC (con Z).\n// Se vuelven a la fecha local sin hora: 2026-01 si es inicio de mes, 2026-10-07 si no.\nconst ZONA = 'America/Costa_Rica';\nconst partes = d => Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: ZONA, year: 'numeric',\n  month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' })\n  .formatToParts(d).map(x => [x.type, x.value]));\nconst fecha = d => {\n  const p = partes(d);\n  const inicioDeMes = p.day === '01' && p.hour === '00' && p.minute === '00' && p.second === '00';\n  return inicioDeMes ? `${p.year}-${p.month}` : `${p.year}-${p.month}-${p.day}`;\n};\n// Montos: los NUMERIC con decimales llevan separador de miles y 2 decimales. Enteros (conteos, anos, ids) sin cambios.\nconst monto = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });\nconst fmt = (v, col) => {\n  if (v === null || v === undefined) return '-';\n  if (v instanceof Date) return fecha(v);\n  const s = String(v);\n  if (/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})$/.test(s)) return fecha(new Date(s));\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) return fecha(new Date(`${s}T00:00:00-06:00`));\n  if (/^-?\\d+\\.\\d+$/.test(s) && !/(^|_)id$/i.test(col)) return monto.format(Number(s));\n  return s.slice(0, 60);\n};\nconst lineas = [`Pregunta: ${p.texto.slice(0, 200)}`, `Filas: ${filas.length}${filas.length > MAX ? ` (se muestran ${MAX})` : ''}`];\nif (filas.length) {\n  const cols = Object.keys(filas[0]);\n  lineas.push('', cols.join(' | '));\n  for (const f of filas.slice(0, MAX)) lineas.push(cols.map(c => fmt(f[c], c)).join(' | '));\n} else {\n  lineas.push('', 'Sin resultados.');\n}\nlineas.push('', `SQL: ${p.sql}`);\nlet respuesta = lineas.join('\\n');\nif (respuesta.length > 3900) respuesta = respuesta.slice(0, 3900) + '\\n...(recortado)';\nreturn [{ json: { respuesta } }];"
+      }
+    },
+    {
+      "id": "bot-15",
+      "name": "Construir alerta A2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        -250
+      ],
+      "parameters": {
+        "jsCode": "// Mensaje con el formato estandar de alertas del proyecto (igual que H1 y H2)\nconst a = $input.first().json;\nconst fecha = new Date(a.fecha * 1000).toLocaleString('sv-SE', { timeZone: 'America/Costa_Rica' });\nconst lineas = [\n  'ALERTA CRÍTICA - NutriAnimales S.A. | Lead University BCD 9220',\n  'Tipo: Intento de inyección SQL por el bot de Telegram (A2)',\n  `Fecha: ${fecha}`,\n  `Usuario Telegram: ${a.usuario}`,\n  `Mensaje: ${a.texto.slice(0, 500)}`,\n  `Patrones detectados: ${a.patrones.join(', ')}`,\n  `Etapa: ${a.etapa}`\n];\nif (a.sql_generado) lineas.push(`SQL generado: ${a.sql_generado}`);\nlineas.push(\n  'Severidad: CRÍTICA',\n  'Acción: La consulta no se ejecutó. Verificar quién envió el mensaje y si la cuenta de Telegram autorizada está comprometida.'\n);\nreturn [{ json: { mensaje: lineas.join('\\n') } }];"
+      }
+    },
+    {
+      "id": "bot-16",
+      "name": "Registrar en alertas_auditoria",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3080,
+        -250
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO alertas_auditoria (tipo, alerta, mensaje, severidad)\nVALUES ('datos', 'A2', $1, 'critica')\nRETURNING id, 'Consulta bloqueada: no se ejecutó nada en la base de datos.' || E'\\n\\n' || mensaje AS respuesta;",
+        "options": {
+          "queryReplacement": "={{ [ $json.mensaje ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "nutriPgTi01",
+          "name": "Postgres ti_db"
+        }
+      }
+    },
+    {
+      "id": "bot-17",
+      "name": "Responder en Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3320,
+        0
+      ],
+      "parameters": {
+        "chatId": "={{ $('Leer update').first().json.chat_id }}",
+        "text": "={{ String($json.respuesta).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "reply_to_message_id": "={{ $('Leer update').first().json.message_id }}"
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "nutriTelegram01",
+          "name": "Telegram NutriAnimales"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Probar manualmente": {
+      "main": [
+        [
+          {
+            "node": "Configuración",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cada 10 segundos": {
+      "main": [
+        [
+          {
+            "node": "Configuración",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configuración": {
+      "main": [
+        [
+          {
+            "node": "Leer token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer token": {
+      "main": [
+        [
+          {
+            "node": "Offset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offset": {
+      "main": [
+        [
+          {
+            "node": "getUpdates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "getUpdates": {
+      "main": [
+        [
+          {
+            "node": "Leer update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer update": {
+      "main": [
+        [
+          {
+            "node": "Tipo de update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tipo de update": {
+      "main": [
+        [
+          {
+            "node": "deleteWebhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Confirmar update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirmar update": {
+      "main": [
+        [
+          {
+            "node": "Filtro A2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtro A2": {
+      "main": [
+        [
+          {
+            "node": "Bloqueado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bloqueado?": {
+      "main": [
+        [
+          {
+            "node": "Construir alerta A2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Groq: pregunta a SQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq: pregunta a SQL": {
+      "main": [
+        [
+          {
+            "node": "Validar SQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar SQL": {
+      "main": [
+        [
+          {
+            "node": "SQL valido?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SQL valido?": {
+      "main": [
+        [
+          {
+            "node": "Ejecutar como agente_ia",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Construir alerta A2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder en Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ejecutar como agente_ia": {
+      "main": [
+        [
+          {
+            "node": "Resumir resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resumir resultado": {
+      "main": [
+        [
+          {
+            "node": "Responder en Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir alerta A2": {
+      "main": [
+        [
+          {
+            "node": "Registrar en alertas_auditoria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar en alertas_auditoria": {
+      "main": [
+        [
+          {
+            "node": "Responder en Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Costa_Rica",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false
+  },
+  "pinData": {},
+  "tags": []
+}

@@ -100,6 +100,33 @@ Cada alerta queda registrada en `alertas_auditoria` y se envia a Telegram con el
 
 `fn_h5_desviaciones()` ya compara la configuracion contra `pg_settings_baseline` y detecta reglas md5 en pg_hba; el flujo H5 puede usarla directamente.
 
+## Bot de Telegram (agente_ia + Groq)
+
+`n8n/workflows/bot_telegram.json` lee los mensajes con `getUpdates` cada 10 s (sin webhook ni puerto publico), filtra el ataque A2, traduce la pregunta a un SELECT con Groq, lo valida otra vez y lo ejecuta como `agente_ia`. Los intentos bloqueados quedan en `alertas_auditoria` (`datos`, `A2`, `critica`). No usa `$env`, asi que funciona con `N8N_BLOCK_ENV_ACCESS_IN_NODE=true`.
+
+Antes de importarlo, en la interfaz de N8N (una sola vez):
+1. Credenciales con estos nombres exactos: `Telegram NutriAnimales` (Telegram API), `Groq API` (Header Auth: `Authorization` = `Bearer <GROQ_API_KEY>`), `Postgres agente_ia` y `Postgres ti_db` (host `postgres`, SSL Require, Ignore SSL Issues).
+2. Data Table `bot_config` con columnas `clave` y `valor` (string) y una fila `telegram_bot_token` = token del bot. `getUpdates` necesita el token en la URL y ninguna credencial de N8N puede ponerlo ahi.
+3. Despues de importar, cambiar el chat autorizado en el nodo "Configuración" si no es el mismo.
+
+Si el token se rota en BotFather, actualizar la credencial y la fila de `bot_config`.
+
+### Por que el token esta en una Data Table
+
+Lo ideal seria que todo el bot usara la credencial cifrada `Telegram NutriAnimales`, pero en N8N 2.44 no se puede para leer mensajes:
+- **HTTP Request con "Predefined Credential Type" → Telegram API:** N8N solo agrega a la peticion lo que la credencial declara en `authenticate` (headers, query o body). `telegramApi` no define `authenticate` y Telegram exige el token en la ruta (`/bot<token>/getUpdates`). Probado: la peticion sale sin token y Telegram responde `404 Not Found`.
+- **Nodo Telegram:** usa la credencial, pero solo para sus operaciones fijas (`sendMessage`, `getChat`, ...). `getUpdates` esta comentado en el codigo del nodo y `deleteWebhook` solo lo usa el Telegram Trigger. Por eso las **respuestas** si usan la credencial cifrada.
+
+Alternativas evaluadas y descartadas:
+- **Proxy interno** (`nginx` sin puertos que agrega el token desde `.env` y solo reenvia `/getUpdates` y `/deleteWebhook`): saca el token de N8N, pero agrega un servicio y una red mas al compose solo para esto, y el token sigue visible con `docker inspect`.
+- **Webhook con Telegram Trigger** (solo credencial cifrada): Telegram necesita llegar a N8N por HTTPS publico. En la VM exige dominio con certificado valido y abrir el 8443 a internet; en local, un tunel cloudflared. Contradice el hardening 4 (nada expuesto).
+
+Mitigaciones aplicadas:
+- El flujo no guarda datos de ninguna ejecucion: `saveDataSuccessExecution`, `saveDataErrorExecution` = `none`, `saveManualExecutions` y `saveExecutionProgress` = `false`. La salida del nodo "Leer token" nunca queda en `execution_data`. Para depurar, activarlas temporalmente y borrar esas ejecuciones despues.
+- El token no esta en el JSON del repositorio ni en `$env` (`N8N_BLOCK_ENV_ACCESS_IN_NODE=true`); el JSON solo tiene el chat ID, que no es secreto.
+- `data/n8n` con chmod 700 (hardening 10): solo el dueno lee la base de N8N.
+- N8N no publica puertos: solo se llega por Nginx, con usuario owner.
+
 ## Carga con pgbench y reporte con pgBadger
 
 Solo necesitan el servicio `postgres` corriendo y `.env`. Ninguno instala nada en el host.
