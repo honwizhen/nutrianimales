@@ -1,0 +1,301 @@
+{
+  "updatedAt": "2026-11-11T05:18:28.175Z",
+  "createdAt": "2026-11-10T01:15:51.796Z",
+  "id": "lwBKL9gO2ycCGuGe",
+  "name": "R4_auth_fallida",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -336,
+        48
+      ],
+      "id": "53627db8-922e-4b8c-9358-117571642ca4",
+      "name": "Cada minuto"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -336,
+        -96
+      ],
+      "id": "3558d92c-2e2e-4cf6-a204-a73f633ab64d",
+      "name": "Probar manualmente"
+    },
+    {
+      "parameters": {
+        "url": "http://loki:3100/loki/api/v1/query",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "sum(count_over_time({job=~\"auth|ufw\"} |~ \"Failed password|Invalid user|authentication failure\" [10m]))"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -144,
+        -16
+      ],
+      "id": "f066d642-1fd2-434a-853c-358d60e34b36",
+      "name": "Consultar Loki",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "33045876-075a-42fb-9741-792434ece2ad",
+              "leftValue": "={{ Number($json.data.result[0]?.value[1] ?? 0) }}",
+              "rightValue": 5,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        32,
+        -16
+      ],
+      "id": "8c8820c6-e844-4fac-b62d-dc7bbf67f4a0",
+      "name": "Hay fallos"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "O1TNOSUgN1vWx7FC",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/O1TNOSUgN1vWx7FC",
+          "cachedResultName": "enviar_alerta"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "codigo": "R4",
+            "categoria": "Rendimiento",
+            "titulo": "Intentos de autenticación fallidos",
+            "severidad": "CRITICA",
+            "detalle": "=Intentos fallidos en los últimos 10 min: {{ $json.data.result[0].value[1] }} (umbral: 5)\nFuente: /var/log/auth.log vía Loki",
+            "accion": "Revisar el origen con sudo grep \"Failed password\" /var/log/auth.log y bloquear la IP con sudo ufw deny from IP",
+            "dedup_key": "R4:ssh",
+            "dedup_minutos": "10"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "codigo",
+              "displayName": "codigo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "categoria",
+              "displayName": "categoria",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "titulo",
+              "displayName": "titulo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "severidad",
+              "displayName": "severidad",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "detalle",
+              "displayName": "detalle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "accion",
+              "displayName": "accion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dedup_key",
+              "displayName": "dedup_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dedup_minutos",
+              "displayName": "dedup_minutos",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        256,
+        -112
+      ],
+      "id": "d9714395-cc1e-4f0c-864c-43d9de12c3c1",
+      "name": "Call 'enviar_alerta'"
+    }
+  ],
+  "connections": {
+    "Cada minuto": {
+      "main": [
+        [
+          {
+            "node": "Consultar Loki",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probar manualmente": {
+      "main": [
+        [
+          {
+            "node": "Consultar Loki",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Loki": {
+      "main": [
+        [
+          {
+            "node": "Hay fallos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hay fallos": {
+      "main": [
+        [
+          {
+            "node": "Call 'enviar_alerta'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "78a999f1-7b6a-4f12-892b-63ec6c9f0c0b",
+  "activeVersionId": null,
+  "versionCounter": 36,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-11-10T01:15:51.806Z",
+      "createdAt": "2026-11-10T01:15:51.806Z",
+      "role": "workflow:owner",
+      "workflowId": "lwBKL9gO2ycCGuGe",
+      "projectId": "zobSzejsFK62MscP",
+      "project": {
+        "updatedAt": "2026-11-08T21:12:37.556Z",
+        "createdAt": "2026-11-08T20:38:53.739Z",
+        "id": "zobSzejsFK62MscP",
+        "name": "Admin Nutrianimales <admin@nutrianimales.local>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "3d24e564-5626-43e5-aa3e-e1f2e2d1f1ba"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

@@ -1,0 +1,258 @@
+{
+  "updatedAt": "2026-11-11T03:28:34.356Z",
+  "createdAt": "2026-11-09T00:54:39.559Z",
+  "id": "kKL5xlqvJ1lQwnmx",
+  "name": "test_enviar_alerta",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d0e7aa40-1f1f-4154-983b-018361405a2e",
+              "name": "codigo",
+              "value": "TEST",
+              "type": "string"
+            },
+            {
+              "id": "78548109-a71a-47dc-a954-637feb7520cf",
+              "name": "categoria",
+              "value": "Prueba",
+              "type": "string"
+            },
+            {
+              "id": "f2387358-517b-4df4-87cb-fefd6a95182b",
+              "name": "titulo",
+              "value": "Alerta de prueba",
+              "type": "string"
+            },
+            {
+              "id": "546497a9-2ff6-495b-a42c-d615a8aed00d",
+              "name": "severidad",
+              "value": "CRITICA",
+              "type": "string"
+            },
+            {
+              "id": "3adb1519-1169-4569-9a55-973ff4386b6e",
+              "name": "detalle",
+              "value": "Detalle de prueba",
+              "type": "string"
+            },
+            {
+              "id": "3b5dec58-222b-4f97-a424-e1c96053d987",
+              "name": "accion",
+              "value": "Ninguna",
+              "type": "string"
+            },
+            {
+              "id": "18dcbad7-add4-497a-8e5a-dc4598c11215",
+              "name": "dedup_key",
+              "value": "TEST:7",
+              "type": "string"
+            },
+            {
+              "id": "a5ab9e29-f676-4df2-9870-029161a3433e",
+              "name": "dedup_minutos",
+              "value": "15",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "8e1a4779-7e13-42ba-9827-8b8e4cbfca63",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        32,
+        0
+      ],
+      "id": "1c715d6c-9bcc-4677-b2f1-98b5bebc1bd4",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "O1TNOSUgN1vWx7FC",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/O1TNOSUgN1vWx7FC",
+          "cachedResultName": "enviar_alerta"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "codigo",
+              "displayName": "codigo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "categoria",
+              "displayName": "categoria",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "titulo",
+              "displayName": "titulo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "severidad",
+              "displayName": "severidad",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "detalle",
+              "displayName": "detalle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "accion",
+              "displayName": "accion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dedup_key",
+              "displayName": "dedup_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dedup_minutos",
+              "displayName": "dedup_minutos",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        448,
+        0
+      ],
+      "id": "a46a9060-2440-4506-b2e1-9b4b01e5de82",
+      "name": "Call 'enviar_alerta'"
+    }
+  ],
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Call 'enviar_alerta'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "d16e02b1-024d-4a51-918a-9aa4eb11976c",
+  "activeVersionId": null,
+  "versionCounter": 32,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-11-09T00:54:39.582Z",
+      "createdAt": "2026-11-09T00:54:39.582Z",
+      "role": "workflow:owner",
+      "workflowId": "kKL5xlqvJ1lQwnmx",
+      "projectId": "zobSzejsFK62MscP",
+      "project": {
+        "updatedAt": "2026-11-08T21:12:37.556Z",
+        "createdAt": "2026-11-08T20:38:53.739Z",
+        "id": "zobSzejsFK62MscP",
+        "name": "Admin Nutrianimales <admin@nutrianimales.local>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "3d24e564-5626-43e5-aa3e-e1f2e2d1f1ba"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

@@ -1,0 +1,302 @@
+{
+  "updatedAt": "2026-11-11T05:17:15.817Z",
+  "createdAt": "2026-11-10T00:11:42.286Z",
+  "id": "4hPY4SJlT80bNsIz",
+  "name": "R2_conexiones",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -256,
+        48
+      ],
+      "id": "c4a75736-60c6-44d3-baf8-6c2e631c5761",
+      "name": "Cada minuto"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -256,
+        -80
+      ],
+      "id": "487d6a2a-6a37-4a3c-97a5-a1422fdfca34",
+      "name": "Probar manualmente"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "f7950fd2-b195-4d74-a353-288fb8d7f357",
+              "leftValue": "={{ $json.conexiones }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        112,
+        -16
+      ],
+      "id": "bfe625f6-78f5-42be-83c5-cb514176f495",
+      "name": "Hay saturacion"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "O1TNOSUgN1vWx7FC",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/O1TNOSUgN1vWx7FC",
+          "cachedResultName": "enviar_alerta"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "codigo": "R2",
+            "categoria": "Rendimiento",
+            "titulo": "Saturación de conexiones activas",
+            "severidad": "ADVERTENCIA",
+            "accion": "Identificar sesiones abiertas con SELECT * FROM pg_stat_activity",
+            "dedup_key": "R2:saturacion",
+            "dedup_minutos": "15",
+            "detalle": "=Conexiones abiertas: {{ $json.conexiones }} (umbral: 10) Conexiones activas: {{ $json.activas }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "codigo",
+              "displayName": "codigo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "categoria",
+              "displayName": "categoria",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "titulo",
+              "displayName": "titulo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "severidad",
+              "displayName": "severidad",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "detalle",
+              "displayName": "detalle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "accion",
+              "displayName": "accion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dedup_key",
+              "displayName": "dedup_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dedup_minutos",
+              "displayName": "dedup_minutos",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        336,
+        -112
+      ],
+      "id": "d9219f07-d710-432b-9bad-4d9123356b51",
+      "name": "Call 'enviar_alerta'"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT count(*) AS conexiones,\n       count(*) FILTER (WHERE state = 'active') AS activas\nFROM pg_stat_activity\nWHERE backend_type = 'client backend'\n  AND datname = 'nutrianimales_db'\nHAVING count(*) > 10;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -64,
+        -16
+      ],
+      "id": "a252e776-6121-458f-8582-eb77a751b8f3",
+      "name": "Consultar conexiones",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "nutriPgTi01",
+          "name": "Postgres ti_db"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Probar manualmente": {
+      "main": [
+        [
+          {
+            "node": "Consultar conexiones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cada minuto": {
+      "main": [
+        [
+          {
+            "node": "Consultar conexiones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hay saturacion": {
+      "main": [
+        [
+          {
+            "node": "Call 'enviar_alerta'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar conexiones": {
+      "main": [
+        [
+          {
+            "node": "Hay saturacion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "b2967fd6-cff5-4550-b4d4-c3df7cd499c8",
+  "activeVersionId": null,
+  "versionCounter": 44,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-11-10T00:11:42.298Z",
+      "createdAt": "2026-11-10T00:11:42.298Z",
+      "role": "workflow:owner",
+      "workflowId": "4hPY4SJlT80bNsIz",
+      "projectId": "zobSzejsFK62MscP",
+      "project": {
+        "updatedAt": "2026-11-08T21:12:37.556Z",
+        "createdAt": "2026-11-08T20:38:53.739Z",
+        "id": "zobSzejsFK62MscP",
+        "name": "Admin Nutrianimales <admin@nutrianimales.local>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "3d24e564-5626-43e5-aa3e-e1f2e2d1f1ba"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}
