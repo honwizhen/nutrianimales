@@ -1,0 +1,244 @@
+{
+  "id": "nutriD7exfil0001",
+  "name": "D7 - Exfiltracion SELECT masivo en tabla sensible",
+  "active": false,
+  "nodes": [
+    {
+      "id": "d7-1",
+      "name": "Cada minuto",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d7-0",
+      "name": "Probar manualmente",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "d7-2",
+      "name": "Consultar",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Version corregida del enunciado: parentesis en el OR y rolname (pg_roles no tiene usename).\n-- Se excluye ti_db (los propios flujos de monitoreo).\nSELECT s.queryid, s.userid, r.rolname AS usuario, s.calls, s.rows,\n       left(s.query, 200) AS query\nFROM pg_stat_statements s\nJOIN pg_roles r ON r.oid = s.userid\nWHERE s.query ~* '^\\s*select'\n  AND (s.query ~* '\\mclientes\\M' OR s.query ~* '\\mventas\\M')\n  AND r.rolname <> 'ti_db';",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "nutriPgTi01",
+          "name": "Postgres ti_db"
+        }
+      }
+    },
+    {
+      "id": "d7-3",
+      "name": "Construir alerta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n// Metodo de deltas: pg_stat_statements acumula calls y rows desde el ultimo reset.\n// Se compara contra la foto del minuto anterior (datos estaticos del flujo).\n// Los datos estaticos solo se guardan con el flujo ACTIVO (no en \"Probar manualmente\").\nconst umbral = 1000;\nconst estado = $getWorkflowStaticData('global');\nconst antes = estado.foto || {};\nconst primera = !estado.foto;\nconst ahora = {};\nconst alertas = [];\nfor (const { json: q } of $input.all()) {\n  const calls = Number(q.calls), rows = Number(q.rows);   // bigint llega como texto\n  const k = `${q.queryid}:${q.userid}`;\n  ahora[k] = { calls, rows };\n  const p = antes[k] && antes[k].calls <= calls ? antes[k] : { calls: 0, rows: 0 };  // calls bajo = reset\n  const dCalls = calls - p.calls, dRows = rows - p.rows;\n  if (primera || dCalls <= 0 || dRows / dCalls <= umbral) continue;\n  const filas = Math.round(dRows / dCalls);\n  const tabla = ((q.query || '').match(/\\b(clientes|ventas)\\b/i) || [])[1] || 'desconocida';\n  alertas.push({ json: {\n    codigo: 'D7', categoria: 'Datos', severidad: 'CRITICA',\n    titulo: 'Posible exfiltración de datos detectada',\n    detalle: esc(`Tabla: ${tabla}\\nFilas retornadas: ${filas.toLocaleString('en-US')} (umbral: 1,000)\\nQuery: ${q.query}\\nUsuario: ${q.usuario}`),\n    accion: esc('Verificar si es consulta legítima. Revisar logs de acceso de N8N. Si no lo es, rotar la contraseña de agente_ia (sección 9).'),\n    dedup_key: `D7:${q.queryid}:${calls}`, dedup_minutos: '60'\n  }});\n}\nestado.foto = ahora;\nreturn alertas;\n"
+      }
+    },
+    {
+      "id": "d7-5",
+      "name": "Enviar alerta",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "O1TNOSUgN1vWx7FC",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/O1TNOSUgN1vWx7FC",
+          "cachedResultName": "enviar_alerta"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "codigo": "={{ $json.codigo }}",
+            "categoria": "={{ $json.categoria }}",
+            "titulo": "={{ $json.titulo }}",
+            "severidad": "={{ $json.severidad }}",
+            "detalle": "={{ $json.detalle }}",
+            "accion": "={{ $json.accion }}",
+            "dedup_key": "={{ $json.dedup_key }}",
+            "dedup_minutos": "={{ $json.dedup_minutos }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "codigo",
+              "displayName": "codigo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "categoria",
+              "displayName": "categoria",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "titulo",
+              "displayName": "titulo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "severidad",
+              "displayName": "severidad",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "detalle",
+              "displayName": "detalle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "accion",
+              "displayName": "accion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dedup_key",
+              "displayName": "dedup_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dedup_minutos",
+              "displayName": "dedup_minutos",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Cada minuto": {
+      "main": [
+        [
+          {
+            "node": "Consultar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probar manualmente": {
+      "main": [
+        [
+          {
+            "node": "Consultar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar": {
+      "main": [
+        [
+          {
+            "node": "Construir alerta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir alerta": {
+      "main": [
+        [
+          {
+            "node": "Enviar alerta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Costa_Rica",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "all"
+  },
+  "pinData": {},
+  "tags": []
+}

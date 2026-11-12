@@ -1,0 +1,244 @@
+{
+  "id": "nutriH3grant0001",
+  "name": "H3 - GRANT de permisos a agente_ia",
+  "active": false,
+  "nodes": [
+    {
+      "id": "h3-1",
+      "name": "Cada minuto",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "h3-0",
+      "name": "Probar manualmente",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "h3-2",
+      "name": "Consultar",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- agente_ia solo debe tener SELECT. has_table_privilege ve privilegios efectivos\n-- (directos, por PUBLIC o heredados) aunque el GRANT lo haya dado otro usuario.\nSELECT c.relname::text AS tabla, p.priv::text AS privilegio\nFROM pg_class c\nJOIN pg_namespace n ON n.oid = c.relnamespace\nCROSS JOIN unnest(ARRAY['INSERT','UPDATE','DELETE','TRUNCATE']) AS p(priv)\nWHERE n.nspname = 'public' AND c.relkind IN ('r','p','v')\n  AND has_table_privilege('agente_ia', c.oid, p.priv)\nUNION ALL\nSELECT 'ROL', 'superuser/createrole/createdb'\nFROM pg_roles WHERE rolname = 'agente_ia'\n  AND (rolsuper OR rolcreaterole OR rolcreatedb)\nUNION ALL\nSELECT 'MIEMBRO DE', g.rolname::text\nFROM pg_auth_members m\nJOIN pg_roles g ON g.oid = m.roleid\nJOIN pg_roles u ON u.oid = m.member\nWHERE u.rolname = 'agente_ia';",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "nutriPgTi01",
+          "name": "Postgres ti_db"
+        }
+      }
+    },
+    {
+      "id": "h3-3",
+      "name": "Construir alerta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n// Una sola alerta con todos los privilegios de mas (0 filas = todo bien)\nconst filas = $input.all().map(i => i.json).filter(r => r.tabla);\nif (filas.length === 0) return [];\nconst lista = filas.slice(0, 10).map(r => `- ${r.tabla}: ${r.privilegio}`).join('\\n');\nconst resto = filas.length > 10 ? `\\n... y ${filas.length - 10} mas` : '';\nreturn [{ json: {\n  codigo: 'H3', categoria: 'Hardening', severidad: 'CRITICA',\n  titulo: 'GRANT de permisos a usuario agente_ia',\n  detalle: esc(`Usuario: agente_ia (debe tener solo SELECT)\\nPrivilegios detectados: ${filas.length}\\n${lista}${resto}`),\n  accion: esc('Revertir: REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA public FROM agente_ia; y revisar quien ejecuto el GRANT en los logs (log_statement = ddl).'),\n  dedup_key: `H3:${filas.length}`, dedup_minutos: '60'\n}}];"
+      }
+    },
+    {
+      "id": "h3-5",
+      "name": "Enviar alerta",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "O1TNOSUgN1vWx7FC",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/O1TNOSUgN1vWx7FC",
+          "cachedResultName": "enviar_alerta"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "codigo": "={{ $json.codigo }}",
+            "categoria": "={{ $json.categoria }}",
+            "titulo": "={{ $json.titulo }}",
+            "severidad": "={{ $json.severidad }}",
+            "detalle": "={{ $json.detalle }}",
+            "accion": "={{ $json.accion }}",
+            "dedup_key": "={{ $json.dedup_key }}",
+            "dedup_minutos": "={{ $json.dedup_minutos }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "codigo",
+              "displayName": "codigo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "categoria",
+              "displayName": "categoria",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "titulo",
+              "displayName": "titulo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "severidad",
+              "displayName": "severidad",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "detalle",
+              "displayName": "detalle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "accion",
+              "displayName": "accion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dedup_key",
+              "displayName": "dedup_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dedup_minutos",
+              "displayName": "dedup_minutos",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Cada minuto": {
+      "main": [
+        [
+          {
+            "node": "Consultar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probar manualmente": {
+      "main": [
+        [
+          {
+            "node": "Consultar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar": {
+      "main": [
+        [
+          {
+            "node": "Construir alerta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir alerta": {
+      "main": [
+        [
+          {
+            "node": "Enviar alerta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Costa_Rica",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "all"
+  },
+  "pinData": {},
+  "tags": []
+}
