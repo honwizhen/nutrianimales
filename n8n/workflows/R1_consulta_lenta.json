@@ -1,0 +1,302 @@
+{
+  "updatedAt": "2026-11-11T05:16:42.667Z",
+  "createdAt": "2026-11-09T02:28:16.215Z",
+  "id": "zIDUiWHsonJR6fVj",
+  "name": "R1_consulta_lenta",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -432,
+        96
+      ],
+      "id": "0265fa02-3045-471e-9eb6-033c02099899",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -432,
+        -32
+      ],
+      "id": "88fb978c-2de5-438e-bf19-4c1d349bdffa",
+      "name": "Probar manualmente"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT s.queryid, r.rolname AS usuario, s.calls,\n       round(s.max_exec_time) AS max_ms, round(s.mean_exec_time) AS prom_ms,\n       left(s.query, 200) AS query\nFROM pg_stat_statements s\nJOIN pg_roles r ON r.oid = s.userid\nWHERE s.max_exec_time > 1000\n  AND s.query NOT ILIKE '%pg_stat_%'\nORDER BY s.max_exec_time DESC LIMIT 5;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -224,
+        32
+      ],
+      "id": "515b1eb1-55eb-4d22-ac9b-3fad56a7855a",
+      "name": "Consultar lentas",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "nutriPgTi01",
+          "name": "Postgres ti_db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "4c0deaf4-c263-4f35-a5cc-ab0acc3e5c73",
+              "leftValue": "={{ $json.queryid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        0,
+        32
+      ],
+      "id": "c223a8ea-d60b-41bf-a6af-40b2c78f2bdd",
+      "name": "Hay lentas"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "O1TNOSUgN1vWx7FC",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/O1TNOSUgN1vWx7FC",
+          "cachedResultName": "enviar_alerta"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "codigo": "R1",
+            "categoria": "Rendimiento",
+            "titulo": "Consulta lenta",
+            "severidad": "ADVERTENCIA",
+            "detalle": "=Query: {{ $json.query }}\nDuración máx: {{ $json.max_ms }} ms | Usuario: {{ $json.usuario }}",
+            "accion": "Revisar el plan de la consulta (EXPLAIN ANALYZE)",
+            "dedup_key": "=Query: {{ $json.query }}\nDuración máx: {{ $json.max_ms }} ms | Usuario: {{ $json.usuario }}",
+            "dedup_minutos": "=1440"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "codigo",
+              "displayName": "codigo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "categoria",
+              "displayName": "categoria",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "titulo",
+              "displayName": "titulo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "severidad",
+              "displayName": "severidad",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "detalle",
+              "displayName": "detalle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "accion",
+              "displayName": "accion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dedup_key",
+              "displayName": "dedup_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dedup_minutos",
+              "displayName": "dedup_minutos",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        224,
+        -64
+      ],
+      "id": "af56ba5a-8589-442d-bbf1-c0e22fac91dc",
+      "name": "Call 'enviar_alerta'"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Consultar lentas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probar manualmente": {
+      "main": [
+        [
+          {
+            "node": "Consultar lentas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar lentas": {
+      "main": [
+        [
+          {
+            "node": "Hay lentas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hay lentas": {
+      "main": [
+        [
+          {
+            "node": "Call 'enviar_alerta'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "ab393dd2-983a-44db-9467-9c9374a38c07",
+  "activeVersionId": null,
+  "versionCounter": 38,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-11-09T02:28:16.220Z",
+      "createdAt": "2026-11-09T02:28:16.220Z",
+      "role": "workflow:owner",
+      "workflowId": "zIDUiWHsonJR6fVj",
+      "projectId": "zobSzejsFK62MscP",
+      "project": {
+        "updatedAt": "2026-11-08T21:12:37.556Z",
+        "createdAt": "2026-11-08T20:38:53.739Z",
+        "id": "zobSzejsFK62MscP",
+        "name": "Admin Nutrianimales <admin@nutrianimales.local>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "3d24e564-5626-43e5-aa3e-e1f2e2d1f1ba"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

@@ -1,0 +1,281 @@
+{
+  "updatedAt": "2026-11-11T02:36:27.069Z",
+  "createdAt": "2026-11-08T23:08:02.896Z",
+  "id": "O1TNOSUgN1vWx7FC",
+  "name": "enviar_alerta",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "codigo"
+            },
+            {
+              "name": "categoria"
+            },
+            {
+              "name": "titulo"
+            },
+            {
+              "name": "severidad"
+            },
+            {
+              "name": "detalle"
+            },
+            {
+              "name": "accion"
+            },
+            {
+              "name": "dedup_key"
+            },
+            {
+              "name": "dedup_minutos"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -352,
+        16
+      ],
+      "id": "34298150-1a53-48cd-a53b-234c4f836807",
+      "name": "Entrada"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT count(*) AS ya_enviada\nFROM alertas_auditoria\nWHERE alerta = $1\n  AND mensaje LIKE '%' || $2 || '%'\n  AND fecha > now() - make_interval(mins => $3::int);",
+        "options": {
+          "queryReplacement": "={{ [$('Entrada').item.json.codigo, $('Entrada').item.json.dedup_key, $('Entrada').item.json.dedup_minutos] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -176,
+        16
+      ],
+      "id": "0ad1b04d-9445-46da-b91a-39e55ab64adb",
+      "name": "Ya se envio",
+      "credentials": {
+        "postgres": {
+          "id": "nutriPgTi01",
+          "name": "Postgres ti_db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "8c37239a-ef1f-4acc-a6ec-9b8d69e211fe",
+              "leftValue": "={{ Number($json.ya_enviada) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        0,
+        16
+      ],
+      "id": "7744fae2-bf3b-47d2-9b18-79d49e481f7d",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f961fce7-43ec-4f62-a84e-6e83c22aedda",
+              "name": "chat_id",
+              "value": "-1004494991357",
+              "type": "string"
+            },
+            {
+              "id": "d4563045-8beb-445a-9944-77432c23c5fa",
+              "name": "mensaje",
+              "value": "={{ $('Entrada').item.json.severidad === 'CRITICA' ? 'ALERTA CRÍTICA' : 'ADVERTENCIA' }} - NutriAnimales S.A. | Lead University BCD 9220\nTipo: {{ $('Entrada').item.json.titulo }} ({{ $('Entrada').item.json.codigo }})\nFecha: {{ $now.setZone('America/Costa_Rica').toFormat('yyyy-MM-dd HH:mm:ss') }}\n{{ $('Entrada').item.json.detalle }}\nSeveridad: {{ $('Entrada').item.json.severidad === 'CRITICA' ? 'CRÍTICA' : 'ADVERTENCIA' }}\nAcción: {{ $('Entrada').item.json.accion }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        208,
+        -64
+      ],
+      "id": "c38655ad-398b-4a70-90a4-d77f8dfc3e7c",
+      "name": "Armar mensaje"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.mensaje }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        384,
+        -64
+      ],
+      "id": "145131b4-7f59-4df4-8003-3e330d86f909",
+      "name": "Send a text message",
+      "webhookId": "eccad3b7-688d-429a-9d04-75aaf6413c1b",
+      "credentials": {
+        "telegramApi": {
+          "id": "nutriTelegram01",
+          "name": "Telegram NutriAnimales"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO alertas_auditoria (tipo, alerta, mensaje, severidad)\nVALUES ($1, $2, $3 || ' [' || $4 || ']', $5);",
+        "options": {
+          "queryReplacement": "={{ [$('Entrada').item.json.categoria, $('Entrada').item.json.codigo, $('Armar mensaje').item.json.mensaje, $('Entrada').item.json.dedup_key, $('Entrada').item.json.severidad] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        608,
+        -64
+      ],
+      "id": "3bfc31fa-05dd-4738-9b13-0bed11f1aef2",
+      "name": "Registrar",
+      "credentials": {
+        "postgres": {
+          "id": "nutriPgTi01",
+          "name": "Postgres ti_db"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Entrada": {
+      "main": [
+        [
+          {
+            "node": "Ya se envio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ya se envio": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Armar mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar mensaje": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message": {
+      "main": [
+        [
+          {
+            "node": "Registrar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "a0765aa4-dd6d-4c71-b8a2-1f4f6d94a1ff",
+  "activeVersionId": "57592eb6-73b2-49e0-8d8e-e61ceabe8daa",
+  "versionCounter": 84,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-11-08T23:08:02.914Z",
+      "createdAt": "2026-11-08T23:08:02.914Z",
+      "role": "workflow:owner",
+      "workflowId": "O1TNOSUgN1vWx7FC",
+      "projectId": "zobSzejsFK62MscP",
+      "project": {
+        "updatedAt": "2026-11-08T21:12:37.556Z",
+        "createdAt": "2026-11-08T20:38:53.739Z",
+        "id": "zobSzejsFK62MscP",
+        "name": "Admin Nutrianimales <admin@nutrianimales.local>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "3d24e564-5626-43e5-aa3e-e1f2e2d1f1ba"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

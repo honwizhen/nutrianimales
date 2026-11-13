@@ -1,0 +1,344 @@
+{
+  "updatedAt": "2026-11-13T02:25:26.526Z",
+  "createdAt": "2026-11-10T00:40:59.939Z",
+  "id": "MdbJpBrep0yjpEAd",
+  "name": "R3_horario_no_laboral",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -432,
+        32
+      ],
+      "id": "1b399a4e-6684-459a-ba97-e49e5473425a",
+      "name": "Cada minuto"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -432,
+        -112
+      ],
+      "id": "0c6f4d5d-7ec0-442b-b2fc-9829a392a43f",
+      "name": "Probar manualmente"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ce5b1f39-f2bc-4fa4-beb4-0943c2215cca",
+              "name": "hora_inicio",
+              "value": 23,
+              "type": "number"
+            },
+            {
+              "id": "e41aec18-46cf-4dcf-999b-b9f5658acea2",
+              "name": "hora_fin",
+              "value": 6,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -240,
+        -32
+      ],
+      "id": "dabcad1c-e45e-4620-a041-d4f2eea15656",
+      "name": "Horario"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT pid, usename, client_addr, application_name,\n       backend_start AT TIME ZONE 'America/Costa_Rica' AS inicio_cr\nFROM pg_stat_activity\nWHERE backend_type = 'client backend'\n  AND usename <> 'ti_db'\n  AND (extract(hour FROM backend_start AT TIME ZONE 'America/Costa_Rica') >= $1::int\n       OR extract(hour FROM backend_start AT TIME ZONE 'America/Costa_Rica') < $2::int);",
+        "options": {
+          "queryReplacement": "={{ [$json.hora_inicio, $json.hora_fin] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -64,
+        -32
+      ],
+      "id": "65e418d0-6b81-463d-b62d-e618aa1ce270",
+      "name": "Consultar fuera de horario",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "nutriPgTi01",
+          "name": "Postgres ti_db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "bb6470b9-7e3e-4327-963c-33c779e61d60",
+              "leftValue": "={{ String($json.pid ?? '') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        112,
+        -32
+      ],
+      "id": "700130ac-dfb3-4472-83ef-ce4ae11b734f",
+      "name": "Hay conexiones"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "O1TNOSUgN1vWx7FC",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/O1TNOSUgN1vWx7FC",
+          "cachedResultName": "enviar_alerta"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "titulo": "Conexión en horario no laboral",
+            "codigo": "R3",
+            "categoria": "Rendimiento",
+            "severidad": "CRITICA",
+            "detalle": "=Usuario: {{ $json.usename }} | PID: {{ $json.pid }}\nInicio (hora CR): {{ $json.inicio_cr }}\nOrigen: {{ $json.client_addr ?? 'socket local' }} | App: {{ $json.application_name }}",
+            "accion": "Verificar si la conexión es legítima. Si no lo es, cerrarla con pg_terminate_backend(pid)",
+            "dedup_key": "=R3:{{ $json.pid }}:{{ $json.inicio_cr }}",
+            "dedup_minutos": "1440"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "codigo",
+              "displayName": "codigo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "categoria",
+              "displayName": "categoria",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "titulo",
+              "displayName": "titulo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "severidad",
+              "displayName": "severidad",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "detalle",
+              "displayName": "detalle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "accion",
+              "displayName": "accion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dedup_key",
+              "displayName": "dedup_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dedup_minutos",
+              "displayName": "dedup_minutos",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        336,
+        -128
+      ],
+      "id": "f42c169d-2a7b-4187-94d9-88d667dda22a",
+      "name": "Call 'enviar_alerta'"
+    }
+  ],
+  "connections": {
+    "Cada minuto": {
+      "main": [
+        [
+          {
+            "node": "Horario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probar manualmente": {
+      "main": [
+        [
+          {
+            "node": "Horario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Horario": {
+      "main": [
+        [
+          {
+            "node": "Consultar fuera de horario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar fuera de horario": {
+      "main": [
+        [
+          {
+            "node": "Hay conexiones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hay conexiones": {
+      "main": [
+        [
+          {
+            "node": "Call 'enviar_alerta'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "0cdb7609-5f58-4e16-bfe9-6e424c79f5c6",
+  "activeVersionId": "0cdb7609-5f58-4e16-bfe9-6e424c79f5c6",
+  "versionCounter": 55,
+  "triggerCount": 1,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-11-10T00:40:59.953Z",
+      "createdAt": "2026-11-10T00:40:59.953Z",
+      "role": "workflow:owner",
+      "workflowId": "MdbJpBrep0yjpEAd",
+      "projectId": "zobSzejsFK62MscP",
+      "project": {
+        "updatedAt": "2026-11-08T21:12:37.556Z",
+        "createdAt": "2026-11-08T20:38:53.739Z",
+        "id": "zobSzejsFK62MscP",
+        "name": "Admin Nutrianimales <admin@nutrianimales.local>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "3d24e564-5626-43e5-aa3e-e1f2e2d1f1ba"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": "Version 0cdb7609",
+    "description": ""
+  }
+}
