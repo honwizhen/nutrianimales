@@ -1,10 +1,10 @@
 {
-  "updatedAt": "2026-11-11T05:17:31.305Z",
+  "updatedAt": "2026-11-13T02:25:26.526Z",
   "createdAt": "2026-11-10T00:40:59.939Z",
   "id": "MdbJpBrep0yjpEAd",
   "name": "R3_horario_no_laboral",
   "description": null,
-  "active": false,
+  "active": true,
   "isArchived": false,
   "nodes": [
     {
@@ -25,8 +25,7 @@
         32
       ],
       "id": "1b399a4e-6684-459a-ba97-e49e5473425a",
-      "name": "Cada minuto",
-      "disabled": true
+      "name": "Cada minuto"
     },
     {
       "parameters": {},
@@ -312,10 +311,10 @@
   },
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "d09db0fd-5aad-4292-a05a-ee6c6f11fe58",
-  "activeVersionId": null,
-  "versionCounter": 54,
-  "triggerCount": 0,
+  "versionId": "0cdb7609-5f58-4e16-bfe9-6e424c79f5c6",
+  "activeVersionId": "0cdb7609-5f58-4e16-bfe9-6e424c79f5c6",
+  "versionCounter": 55,
+  "triggerCount": 1,
   "sourceWorkflowId": null,
   "tags": [],
   "shared": [
@@ -339,7 +338,7 @@
     }
   ],
   "versionMetadata": {
-    "name": null,
-    "description": null
+    "name": "Version 0cdb7609",
+    "description": ""
   }
 }
