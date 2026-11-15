@@ -55,7 +55,7 @@ postgres/init/            se ejecuta una vez al crear el volumen:
   06-baseline.sql           pg_settings_baseline, fn_h5_desviaciones(), hashes MD5 para H2
 loki/loki-config.yaml     almacenamiento local, retencion 30 dias
 alloy/config.alloy        envia /var/log/ufw.log y /var/log/auth.log a Loki
-n8n/workflows/            H1_ufw.json, H2_hash_config.json
+n8n/workflows/            H1_ufw.json, H2_hash_config.json, H3-H5 y D1-D7 (parte 4)
 scripts/                  setup.sh, gen-certs.sh, n8n-import.sh, verify.sh, carga_pgbench.sh, reporte_pgbadger.sh
 ```
 
@@ -99,6 +99,76 @@ docker exec -it nutri_postgres psql -U postgres -d nutrianimales_db -c "SELECT f
 Cada alerta queda registrada en `alertas_auditoria` y se envia a Telegram con el formato del enunciado. Los flujos corren cada minuto y ademas tienen un disparador "Probar manualmente" para la demo en vivo. `scripts/n8n-import.sh` se puede repetir: despublica, reimporta y vuelve a publicar.
 
 `fn_h5_desviaciones()` ya compara la configuracion contra `pg_settings_baseline` y detecta reglas md5 en pg_hba; el flujo H5 puede usarla directamente.
+
+## Alertas H3-H5 y D1-D7 (parte 4)
+
+Diez flujos en `n8n/workflows/` con la misma forma: `Cada minuto` (o `Probar manualmente`) → `Consultar` (Postgres, credencial `Postgres ti_db`) → `Construir alerta` (Code) → `Enviar alerta` (Execute Workflow al subflujo `enviar_alerta`, que deduplica, envía a Telegram y registra en `alertas_auditoria`).
+
+Requisito: el subflujo `enviar_alerta` debe estar **publicado** (activo). N8N 2.x rechaza llamar un subflujo sin versión publicada (`Workflow is not active and cannot be executed`). `scripts/n8n-import.sh` solo publica los flujos cuyo id empieza con `nutri`.
+
+| Alerta | Archivo | Fuente | Umbral | dedup_key (minutos) |
+|---|---|---|---|---|
+| H3 | `H3_grant_agente_ia.json` | `has_table_privilege`, `pg_roles`, `pg_auth_members` | cualquier INSERT/UPDATE/DELETE/TRUNCATE | `H3:<n>` (60) |
+| H4 | `H4_ip_fuera_docker.json` | `pg_stat_activity` | IP fuera de 172.28.0.0/16 | `H4:<pid>:<inicio>` (60) |
+| H5 | `H5_ssl_md5_baseline.json` | `fn_h5_desviaciones()` | cualquier desvío del baseline | `H5:<parametro>=<valor>` (60) |
+| D1 | `D1_delete_masivo.json` | `pg_stat_statements` (deltas) | > 100 filas por ejecución | `D1:<queryid>:<calls>` (60) |
+| D2 | `D2_crecimiento_tabla.json` | `pg_stat_user_tables` | > 20 % en 30 min (tablas ≥ 50 filas) | `D2:<tabla>` (30) |
+| D3 | `D3_backup_obsoleto.json` | tabla `backups` (`estado = 'exitoso'`) | > 24 h | `D3` (360) |
+| D4 | `D4_duplicados.json` | `HAVING count(*) > 1` en clientes.correo, productos.codigo, lotes_produccion.codigo | > 5 duplicados | `D4:<total>` (60) |
+| D5 | `D5_bloqueos_deadlocks.json` | `pg_blocking_pids`, `pg_stat_database.deadlocks` | bloqueo > 30 s o deadlock nuevo | `D5:<pid>` (30) |
+| D6 | `D6_update_masivo.json` | `pg_stat_statements` (deltas) | > 50 filas por ejecución | `D6:<queryid>:<calls>` (60) |
+| D7 | `D7_exfiltracion.json` | `pg_stat_statements` (deltas), sin `ti_db` | > 1,000 filas en clientes/ventas | `D7:<queryid>:<calls>` (60) |
+
+**Método de deltas (D1, D6, D7).** `pg_stat_statements` acumula `calls` y `rows`. El nodo Code guarda la foto anterior en los datos estáticos del flujo y alerta cuando `(rows - rows_antes) / (calls - calls_antes)` supera el umbral. La primera ejecución solo guarda la foto. Los datos estáticos (D1, D2, D5 deadlocks, D6, D7) **solo se guardan con el flujo activo**: con "Probar manualmente" esas alertas nunca disparan.
+
+Correcciones respecto al enunciado:
+- A4: `GRANT INSERT ON ALL TABLES TO agente_ia;` es error de sintaxis; se usa `GRANT INSERT ON ALL TABLES IN SCHEMA public TO agente_ia;`.
+- D7: el SQL del enunciado no tiene paréntesis en el `OR` (cualquier SELECT a clientes dispara) y usa `usename`, que no existe en `pg_roles` (es `rolname`).
+- H5 se prueba con `password_encryption = md5`; `ssl = off` cortaría la conexión TLS de N8N.
+- D3 busca `estado = 'exitoso'` (valor que usa `03-seed.sql`).
+- H4: con el `pg_hba.conf` del repositorio cualquier IP fuera de 172.28.0.0/16 se rechaza antes de llegar a `pg_stat_activity`. Para la demo se relaja `pg_hba.conf` (lo que además dispara H2) y se conecta por 127.0.0.1.
+
+Emulación (como `postgres`, dentro de `psql`) y respuesta:
+
+```sql
+-- H3 (ataque A4)
+GRANT INSERT ON ALL TABLES IN SCHEMA public TO agente_ia;
+REVOKE INSERT ON ALL TABLES IN SCHEMA public FROM agente_ia;
+-- H5
+ALTER SYSTEM SET password_encryption = 'md5'; SELECT pg_reload_conf();
+ALTER SYSTEM RESET password_encryption;       SELECT pg_reload_conf();
+-- D1
+CREATE TABLE prueba_delete AS SELECT * FROM ventas LIMIT 200;
+DELETE FROM prueba_delete;
+DROP TABLE prueba_delete;
+-- D6
+CREATE TABLE prueba_update AS SELECT * FROM lotes_produccion LIMIT 200;
+UPDATE prueba_update SET estado = 'cancelado';
+DROP TABLE prueba_update;
+-- D2 (+30 % en gastos) y limpieza (60 filas: no dispara D1)
+INSERT INTO gastos (categoria, descripcion, monto, fecha, aprobado_por)
+SELECT 'prueba', 'prueba D2', 1000, CURRENT_DATE, 'parte4' FROM generate_series(1, 60);
+DELETE FROM gastos WHERE descripcion = 'prueba D2';
+-- D3 (envejece el ultimo respaldo) y respuesta
+UPDATE backups SET fecha = fecha - interval '25 hours';
+INSERT INTO backups (estado, ruta) VALUES ('exitoso', '/backups/manual.sql.gz');
+-- D4 (6 copias de un correo existente = 6 duplicados) y limpieza
+INSERT INTO clientes (nombre, tipo, correo, segmento)
+SELECT 'Prueba D4 ' || g, 'persona', 'cliente1@example.com', 'minorista' FROM generate_series(1, 6) g;
+DELETE FROM clientes WHERE nombre LIKE 'Prueba D4 %';
+```
+
+D5 (dos terminales de `psql`): en la 1 `BEGIN; UPDATE plantas SET estado = estado WHERE id = 1;`, en la 2 `UPDATE plantas SET estado = estado WHERE id = 1;` (queda esperando); después de la alerta, `ROLLBACK;` en la 1.
+
+D7 (ataque A5), como `agente_ia` por la red Docker:
+
+```bash
+set -a; . ./.env; set +a
+docker exec -e PGPASSWORD="$AGENTE_IA_PASSWORD" -e PGSSLMODE=require nutri_postgres \
+  psql -h postgres -U agente_ia -d nutrianimales_db -c "SELECT * FROM ventas" > /dev/null
+```
+
+`clientes` tiene 200 filas: `SELECT * FROM clientes` nunca supera 1,000. A5 se demuestra con `ventas` (1,200 filas) salvo que el grupo suba `clientes` a más de 1,000.
 
 ## Bot de Telegram (agente_ia + Groq)
 

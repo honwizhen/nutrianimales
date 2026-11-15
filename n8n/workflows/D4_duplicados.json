@@ -1,0 +1,244 @@
+{
+  "id": "nutriD4duplic001",
+  "name": "D4 - Duplicados en tablas criticas",
+  "active": false,
+  "nodes": [
+    {
+      "id": "d4-1",
+      "name": "Cada minuto",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d4-0",
+      "name": "Probar manualmente",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "d4-2",
+      "name": "Consultar",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Clave de negocio por tabla. productos.codigo y lotes_produccion.codigo ya son UNIQUE\n-- (control preventivo); clientes.correo no tiene restriccion.\nSELECT 'clientes' AS tabla, correo AS clave, count(*) AS veces\nFROM clientes WHERE correo IS NOT NULL GROUP BY correo HAVING count(*) > 1\nUNION ALL\nSELECT 'productos', codigo, count(*) FROM productos GROUP BY codigo HAVING count(*) > 1\nUNION ALL\nSELECT 'lotes_produccion', codigo, count(*) FROM lotes_produccion GROUP BY codigo HAVING count(*) > 1;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "nutriPgTi01",
+          "name": "Postgres ti_db"
+        }
+      }
+    },
+    {
+      "id": "d4-3",
+      "name": "Construir alerta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n// Duplicados = suma de (veces - 1). Alerta si pasa de 5.\nconst filas = $input.all().map(i => i.json).filter(r => r.tabla);\nconst total = filas.reduce((s, r) => s + Number(r.veces) - 1, 0);\nif (total <= 5) return [];\nconst lista = filas.slice(0, 10).map(r => `- ${r.tabla}: ${r.clave} (${r.veces} veces)`).join('\\n');\nreturn [{ json: {\n  codigo: 'D4', categoria: 'Datos', severidad: 'ADVERTENCIA',\n  titulo: 'Duplicados en tablas críticas',\n  detalle: esc(`Registros duplicados: ${total} (umbral: 5)\\n${lista}`),\n  accion: esc('Revisar el origen de los registros (auditoria_datos, operacion = INSERT), depurar duplicados y evaluar una restricción UNIQUE.'),\n  dedup_key: `D4:${total}`, dedup_minutos: '60'\n}}];"
+      }
+    },
+    {
+      "id": "d4-5",
+      "name": "Enviar alerta",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "O1TNOSUgN1vWx7FC",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/O1TNOSUgN1vWx7FC",
+          "cachedResultName": "enviar_alerta"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "codigo": "={{ $json.codigo }}",
+            "categoria": "={{ $json.categoria }}",
+            "titulo": "={{ $json.titulo }}",
+            "severidad": "={{ $json.severidad }}",
+            "detalle": "={{ $json.detalle }}",
+            "accion": "={{ $json.accion }}",
+            "dedup_key": "={{ $json.dedup_key }}",
+            "dedup_minutos": "={{ $json.dedup_minutos }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "codigo",
+              "displayName": "codigo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "categoria",
+              "displayName": "categoria",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "titulo",
+              "displayName": "titulo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "severidad",
+              "displayName": "severidad",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "detalle",
+              "displayName": "detalle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "accion",
+              "displayName": "accion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dedup_key",
+              "displayName": "dedup_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dedup_minutos",
+              "displayName": "dedup_minutos",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Cada minuto": {
+      "main": [
+        [
+          {
+            "node": "Consultar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probar manualmente": {
+      "main": [
+        [
+          {
+            "node": "Consultar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar": {
+      "main": [
+        [
+          {
+            "node": "Construir alerta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir alerta": {
+      "main": [
+        [
+          {
+            "node": "Enviar alerta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Costa_Rica",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "all"
+  },
+  "pinData": {},
+  "tags": []
+}
