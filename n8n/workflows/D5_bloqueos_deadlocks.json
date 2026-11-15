@@ -1,0 +1,244 @@
+{
+  "id": "nutriD5bloqueo01",
+  "name": "D5 - Deadlock o transaccion bloqueada",
+  "active": false,
+  "nodes": [
+    {
+      "id": "d5-1",
+      "name": "Cada minuto",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d5-0",
+      "name": "Probar manualmente",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "d5-2",
+      "name": "Consultar",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Sesiones bloqueadas > 30 s + contador de deadlocks (ultima fila, tipo = 'deadlocks')\nSELECT 'bloqueo' AS tipo, a.pid, a.usename::text AS usuario,\n       array_to_string(pg_blocking_pids(a.pid), ',') AS bloqueado_por,\n       round(extract(epoch FROM now() - a.query_start))::bigint AS valor,\n       left(a.query, 200) AS query\nFROM pg_stat_activity a\nWHERE cardinality(pg_blocking_pids(a.pid)) > 0\n  AND now() - a.query_start > interval '30 seconds'\nUNION ALL\nSELECT 'deadlocks', NULL, NULL, NULL, deadlocks, NULL\nFROM pg_stat_database WHERE datname = current_database();",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "nutriPgTi01",
+          "name": "Postgres ti_db"
+        }
+      }
+    },
+    {
+      "id": "d5-3",
+      "name": "Construir alerta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst estado = $getWorkflowStaticData('global');\nconst out = [];\nfor (const { json: r } of $input.all()) {\n  if (r.tipo === 'bloqueo') {\n    out.push({ json: {\n      codigo: 'D5', categoria: 'Datos', severidad: 'ADVERTENCIA',\n      titulo: 'Transacción bloqueada',\n      detalle: esc(`PID bloqueado: ${r.pid} (usuario: ${r.usuario})\\nBloqueado por PID: ${r.bloqueado_por}\\nTiempo esperando: ${r.valor} s (umbral: 30)\\nQuery: ${r.query}`),\n      accion: esc(`Revisar la sesión ${r.bloqueado_por} en pg_stat_activity. Si está colgada: SELECT pg_terminate_backend(${String(r.bloqueado_por).split(',')[0]});`),\n      dedup_key: `D5:${r.pid}`, dedup_minutos: '30'\n    }});\n  } else if (r.tipo === 'deadlocks') {\n    // Delta del contador (solo se guarda con el flujo ACTIVO)\n    const total = Number(r.valor);\n    const antes = estado.deadlocks;\n    estado.deadlocks = total;\n    if (antes !== undefined && total > antes) {\n      out.push({ json: {\n        codigo: 'D5', categoria: 'Datos', severidad: 'ADVERTENCIA',\n        titulo: 'Deadlock detectado',\n        detalle: esc(`Deadlocks nuevos: ${total - antes} (total en la base: ${total})\\nFuente: pg_stat_database`),\n        accion: esc('Revisar los logs de PostgreSQL (docker logs nutri_postgres | grep -i deadlock) para ver las consultas involucradas.'),\n        dedup_key: `D5:deadlock:${total}`, dedup_minutos: '30'\n      }});\n    }\n  }\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "d5-5",
+      "name": "Enviar alerta",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "O1TNOSUgN1vWx7FC",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/O1TNOSUgN1vWx7FC",
+          "cachedResultName": "enviar_alerta"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "codigo": "={{ $json.codigo }}",
+            "categoria": "={{ $json.categoria }}",
+            "titulo": "={{ $json.titulo }}",
+            "severidad": "={{ $json.severidad }}",
+            "detalle": "={{ $json.detalle }}",
+            "accion": "={{ $json.accion }}",
+            "dedup_key": "={{ $json.dedup_key }}",
+            "dedup_minutos": "={{ $json.dedup_minutos }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "codigo",
+              "displayName": "codigo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "categoria",
+              "displayName": "categoria",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "titulo",
+              "displayName": "titulo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "severidad",
+              "displayName": "severidad",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "detalle",
+              "displayName": "detalle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "accion",
+              "displayName": "accion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dedup_key",
+              "displayName": "dedup_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dedup_minutos",
+              "displayName": "dedup_minutos",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Cada minuto": {
+      "main": [
+        [
+          {
+            "node": "Consultar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probar manualmente": {
+      "main": [
+        [
+          {
+            "node": "Consultar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar": {
+      "main": [
+        [
+          {
+            "node": "Construir alerta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir alerta": {
+      "main": [
+        [
+          {
+            "node": "Enviar alerta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Costa_Rica",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "all"
+  },
+  "pinData": {},
+  "tags": []
+}
