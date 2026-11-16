@@ -3,17 +3,26 @@
 # Uso: ./scripts/verify.sh            (todos)
 #      ./scripts/verify.sh 7          (solo el punto 7)
 cd "$(dirname "$0")/.."
+if [ "$#" -gt 1 ]; then
+  echo "Uso: $0 [1-12]" >&2
+  exit 2
+fi
+ONLY="${1:-}"
+case "$ONLY" in
+  ""|[1-9]|1[0-2]) ;;
+  *) echo "Punto invalido: $ONLY. Usa un numero del 1 al 12." >&2; exit 2 ;;
+esac
+
 set -a; . ./.env; set +a
 
 # psql dentro del contenedor, por TLS como lo haria un cliente de la red Docker
 sql() { # usuario contrasena consulta
   docker exec -e PGPASSWORD="$2" -e PGSSLMODE=require nutri_postgres \
-    psql -h postgres -U "$1" -d "$POSTGRES_DB" -c "$3" 2>&1
+    psql -v ON_ERROR_STOP=1 -h postgres -U "$1" -d "$POSTGRES_DB" -c "$3" 2>&1
 }
 PG() { sql "$POSTGRES_USER" "$POSTGRES_PASSWORD" "$1"; }
 hdr() { echo; echo "================ $1 ================"; echo "\$ $2"; }
 want() { [ -z "$ONLY" ] || [ "$ONLY" = "$1" ]; }
-ONLY="${1:-}"
 
 if want 1; then hdr "1. Usuario no-root" "docker exec <c> whoami / id"
   for c in nutri_n8n nutri_pgadmin; do printf '%-14s ' "$c:"; docker exec "$c" sh -c 'echo "$(whoami 2>/dev/null || echo uid) -> $(id)"'; done
@@ -37,8 +46,21 @@ if want 6; then hdr "6. SSL/TLS en PostgreSQL" "SHOW ssl;"
   PG "SELECT ssl, version, cipher FROM pg_stat_ssl WHERE pid = pg_backend_pid();"
 fi
 if want 7; then hdr "7. agente_ia solo lectura" "INSERT con agente_ia -> permission denied"
-  sql agente_ia "$AGENTE_IA_PASSWORD" "SELECT count(*) AS clientes_visibles FROM clientes;"
-  sql agente_ia "$AGENTE_IA_PASSWORD" "INSERT INTO clientes (nombre, tipo) VALUES ('prueba', 'persona');"
+  if ! sql agente_ia "$AGENTE_IA_PASSWORD" "SELECT count(*) AS clientes_visibles FROM clientes;"; then
+    echo "ERROR: agente_ia no pudo leer la tabla clientes." >&2
+    exit 1
+  fi
+  if output=$(sql agente_ia "$AGENTE_IA_PASSWORD" "BEGIN; INSERT INTO clientes (nombre, tipo) VALUES ('prueba', 'persona'); ROLLBACK;"); then
+    echo "ERROR: agente_ia pudo insertar en la tabla clientes." >&2
+    exit 1
+  elif [[ "$output" == *"permission denied for table clientes"* ]]; then
+    printf '%s\n' "$output"
+    echo "[ok] agente_ia puede leer y no puede insertar en clientes."
+  else
+    printf '%s\n' "$output" >&2
+    echo "ERROR: la insercion fallo por una causa distinta a permisos." >&2
+    exit 1
+  fi
 fi
 if want 8; then hdr "8. Headers de seguridad en Nginx" "curl -kI https://localhost:8443"
   curl -skI https://localhost:8443 | grep -iE '^(HTTP|x-frame|x-content|strict-transport|content-security)'
